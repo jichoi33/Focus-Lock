@@ -1,25 +1,40 @@
 package com.focuslock.app
 
-import androidx.compose.foundation.Canvas
+import android.animation.ValueAnimator
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.drawWithCache
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.PathMeasure
 import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.StrokeJoin
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.platform.LocalInspectionMode
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.util.lerp
 
 @Composable
 internal fun CompletionScreen(modes: Int, description: String, onDone: () -> Unit) {
@@ -61,30 +76,69 @@ internal fun CompletionScreen(modes: Int, description: String, onDone: () -> Uni
 @Composable
 private fun CompletionMark() {
     val colors = MaterialTheme.colorScheme
-    Box(Modifier.size(204.dp), contentAlignment = Alignment.Center) {
-        Canvas(Modifier.matchParentSize()) {
-            val unit = size.minDimension
-            drawCircle(Brush.radialGradient(listOf(colors.primaryContainer, colors.background),
-                center = center, radius = unit * 0.5f), radius = unit * 0.5f)
-            drawCircle(colors.primary.copy(alpha = 0.18f), radius = unit * 0.34f, style = Stroke(1.dp.toPx()))
-            drawCircle(colors.primary.copy(alpha = 0.12f), radius = unit * 0.43f, style = Stroke(1.dp.toPx()))
+    val preview = LocalInspectionMode.current
+    var hasPlayed by rememberSaveable { mutableStateOf(false) }
+    val animateOnEntry = remember { !preview && !hasPlayed && ValueAnimator.areAnimatorsEnabled() }
+    val progress = remember { Animatable(if (animateOnEntry) 0f else 1f) }
 
-            val sparks = listOf(Offset(0.17f, 0.29f), Offset(0.78f, 0.18f), Offset(0.84f, 0.68f))
-            sparks.forEachIndexed { index, position ->
-                val point = position * unit
-                val arm = unit * if (index == 1) 0.037f else 0.024f
-                val tint = colors.primary.copy(alpha = if (index == 1) 0.8f else 0.55f)
-                drawLine(tint, point - Offset(arm, 0f), point + Offset(arm, 0f), 2.dp.toPx(), StrokeCap.Round)
-                drawLine(tint, point - Offset(0f, arm), point + Offset(0f, arm), 2.dp.toPx(), StrokeCap.Round)
-            }
-            drawCircle(colors.primary.copy(alpha = 0.42f), radius = 2.5.dp.toPx(),
-                center = Offset(unit * 0.27f, unit * 0.79f))
-        }
-        Box(Modifier.size(84.dp).background(colors.primary, CircleShape), contentAlignment = Alignment.Center) {
-            Symbol("Check", modifier = Modifier.size(42.dp), tint = colors.onPrimary)
+    LaunchedEffect(Unit) {
+        hasPlayed = true
+        if (animateOnEntry) {
+            progress.animateTo(1f, tween(durationMillis = 850, easing = LinearEasing))
         }
     }
+
+    Box(Modifier.size(204.dp).drawWithCache {
+        val unit = size.minDimension
+        val origin = Offset(size.width / 2f, size.height / 2f)
+        val glow = Brush.radialGradient(listOf(colors.primaryContainer, colors.background),
+            center = origin, radius = unit * 0.5f)
+        val ringStroke = Stroke(1.dp.toPx())
+        val sparkStroke = 2.dp.toPx()
+        val checkStroke = Stroke(3.5.dp.toPx(), cap = StrokeCap.Round, join = StrokeJoin.Round)
+        val check = Path().apply {
+            moveTo(origin.x - 12.dp.toPx(), origin.y)
+            lineTo(origin.x - 4.dp.toPx(), origin.y + 8.dp.toPx())
+            lineTo(origin.x + 13.dp.toPx(), origin.y - 9.dp.toPx())
+        }
+        val checkLength = PathMeasure().apply { setPath(check, forceClosed = false) }
+        val visibleCheck = Path()
+        val sparks = listOf(Offset(0.17f, 0.29f), Offset(0.78f, 0.18f), Offset(0.84f, 0.68f))
+        val dot = Offset(unit * 0.27f, unit * 0.79f)
+
+        onDrawBehind {
+            val time = progress.value
+            val arrival = celebrationPhase(time, 0f, 0.48f)
+            val ripple = celebrationPhase(time, 0.20f, 0.88f)
+            drawCircle(glow, radius = unit * 0.5f, alpha = arrival)
+            drawCircle(colors.primary.copy(alpha = 0.18f * ripple),
+                radius = unit * lerp(0.23f, 0.34f, ripple), style = ringStroke)
+            drawCircle(colors.primary.copy(alpha = 0.12f * ripple),
+                radius = unit * lerp(0.27f, 0.43f, ripple), style = ringStroke)
+
+            sparks.forEachIndexed { index, position ->
+                val spread = celebrationPhase(time, 0.34f + index * 0.06f, 0.86f + index * 0.06f)
+                val point = origin + (position * unit - origin) * lerp(0.56f, 1f, spread)
+                val arm = unit * (if (index == 1) 0.037f else 0.024f) * spread
+                val tint = colors.primary.copy(alpha = (if (index == 1) 0.8f else 0.55f) * spread)
+                drawLine(tint, point - Offset(arm, 0f), point + Offset(arm, 0f), sparkStroke, StrokeCap.Round)
+                drawLine(tint, point - Offset(0f, arm), point + Offset(0f, arm), sparkStroke, StrokeCap.Round)
+            }
+            drawCircle(colors.primary.copy(alpha = 0.42f * ripple), radius = 2.5.dp.toPx() * ripple,
+                center = origin + (dot - origin) * lerp(0.56f, 1f, ripple))
+
+            drawCircle(colors.primary, radius = 42.dp.toPx() * lerp(0.84f, 1f, arrival))
+            val trace = celebrationPhase(time, 0.16f, 0.67f)
+            visibleCheck.reset()
+            if (checkLength.getSegment(0f, checkLength.length * trace, visibleCheck, startWithMoveTo = true)) {
+                drawPath(visibleCheck, colors.onPrimary, style = checkStroke)
+            }
+        }
+    })
 }
+
+private fun celebrationPhase(time: Float, start: Float, end: Float): Float =
+    FastOutSlowInEasing.transform(((time - start) / (end - start)).coerceIn(0f, 1f))
 
 @Preview(showBackground = true, widthDp = 390, heightDp = 740)
 @Composable
