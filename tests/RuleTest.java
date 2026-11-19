@@ -99,7 +99,33 @@ public final class RuleTest {
         instant.id = Rule.QUICK_ID;
         equal(0, state(instant, now - 1).upcoming.size(), "quick locks never generate schedule reminders");
 
-        System.out.println("37 scheduling assertions passed");
+        Rule first = new Rule();
+        first.from = now + Rule.MINUTE;
+        first.to = now + 15 * Rule.MINUTE;
+        Rule overlapping = new Rule();
+        overlapping.from = first.to - Rule.MINUTE;
+        overlapping.to = first.to + 10 * Rule.MINUTE;
+        Rule adjacent = new Rule();
+        adjacent.from = overlapping.to;
+        adjacent.to = overlapping.to + 20 * Rule.MINUTE;
+        Rule later = new Rule();
+        later.from = adjacent.to + Rule.MINUTE;
+        later.to = later.from + Rule.MINUTE;
+        Rule.Window occurrence = state(first, now).nextStart;
+        equal(first.to, Rule.finalRelease(Collections.singletonList(first), occurrence, now, 0L, -1, SEOUL),
+                "a single occurrence releases at its own end");
+        equal(adjacent.to, Rule.finalRelease(Arrays.asList(first, adjacent, later, overlapping), occurrence, now, 0L, -1, SEOUL),
+                "overlapping and adjacent locks extend the release through the first gap");
+        adjacent.enabled = false;
+        equal(overlapping.to, Rule.finalRelease(Arrays.asList(first, adjacent, overlapping), occurrence, now, 0L, -1, SEOUL),
+                "disabled locks do not extend the release");
+
+        Rule continuous = overnight.withRepeatTimes(127, 540, 540);
+        continuous.skippedThrough = 0;
+        equal(0, Rule.finalRelease(Collections.singletonList(continuous), state(continuous, now).latestActive(), now, 0L, -1, SEOUL),
+                "continuous schedules have no release in the preview horizon");
+
+        System.out.println("41 scheduling assertions passed");
 
     }
 

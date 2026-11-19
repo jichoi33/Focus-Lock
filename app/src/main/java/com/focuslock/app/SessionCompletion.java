@@ -2,6 +2,8 @@ package com.focuslock.app;
 
 import android.content.Context;
 import android.content.SharedPreferences;
+import android.os.Build;
+import android.provider.Settings;
 
 /** Remembers completed sessions until their result is acknowledged in the app. */
 final class SessionCompletion {
@@ -13,6 +15,9 @@ final class SessionCompletion {
     private static final String HARD_NAME = "hard_name";
     private static final String HARD_WALL = "hard_wall";
     private static final String HARD_ELAPSED = "hard_elapsed";
+    private static final String AUTO_ENABLED = "auto_enabled";
+    private static final String HARD_AUTO_UNTIL = "hard_auto_until";
+    private static final long AUTO_WINDOW = 12 * 60 * Rule.MINUTE;
     private static final String HARD_BOOT = "hard_boot";
     private static final String SOFT_ID = "soft_id";
     private static final long RECENT = Rule.DAY * Rule.MINUTE;
@@ -34,7 +39,7 @@ final class SessionCompletion {
         String hard = (modes & HARD) != 0 ? prefs.getString(HARD_RESULT, "") : "";
         String soft = (modes & SOFT) != 0 ? prefs.getString(SOFT_RESULT, "") : "";
         if (hard.isEmpty()) return soft;
-        return soft.isEmpty() ? hard : hard + " · " + soft;
+        return soft.isEmpty() ? hard : hard + "\n" + soft;
     }
 
     void observe(SharedPreferences.OnSharedPreferenceChangeListener listener) {
@@ -46,8 +51,31 @@ final class SessionCompletion {
     }
 
     void dismiss() {
-        prefs.edit().remove(PENDING).remove(HARD_RESULT).remove(SOFT_RESULT).apply();
+        prefs.edit().remove(PENDING).remove(HARD_RESULT).remove(SOFT_RESULT).remove(HARD_AUTO_UNTIL).apply();
         LockNotifications.hideCompletion(context);
+    }
+
+    static boolean canOpenOnUnlock(Context context) {
+        return Build.VERSION.SDK_INT < 29 || Settings.canDrawOverlays(context);
+    }
+
+    boolean autoEnabled() {
+        return prefs.getBoolean(AUTO_ENABLED, false) && canOpenOnUnlock(context);
+    }
+
+    void setAutoEnabled(boolean enabled) {
+        SharedPreferences.Editor edit = prefs.edit().putBoolean(AUTO_ENABLED, enabled);
+        if (!enabled) edit.remove(HARD_AUTO_UNTIL);
+        edit.apply();
+    }
+
+    long autoOpenRemaining(SessionClock clock) {
+        return autoEnabled() && (pending() & HARD) != 0
+                ? Math.max(0L, prefs.getLong(HARD_AUTO_UNTIL, 0L) - clock.wall) : 0L;
+    }
+
+    void consumeAutoOpen() {
+        prefs.edit().remove(HARD_AUTO_UNTIL).apply();
     }
 
     // Record the last enforced end so an alarm or a new activity can recover it after process death.
@@ -78,8 +106,14 @@ final class SessionCompletion {
                 ? clock.elapsed - endElapsed : clock.wall - endWall;
         String result = prefs.getString(HARD_NAME, "Hard Lock session");
         SharedPreferences.Editor edit = clearHardDeadline();
-        if (age >= 0 && age < RECENT) record(edit.putString(HARD_RESULT, result), HARD);
-        else edit.apply();
+        if (age >= 0 && age < RECENT) {
+            if (age < AUTO_WINDOW && autoEnabled()) {
+                edit.putLong(HARD_AUTO_UNTIL, clock.wall - age + AUTO_WINDOW);
+            }
+            record(edit.putString(HARD_RESULT, result), HARD);
+        } else {
+            edit.apply();
+        }
     }
 
     void cancelHard() {

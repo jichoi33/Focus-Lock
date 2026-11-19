@@ -29,6 +29,7 @@ public final class FocusService extends Service {
     static final String EXTEND = "com.focuslock.app.EXTEND";
     static final long MAX_QUICK = 24 * 60 * Rule.MINUTE;
     private static final int NOTIFICATION_ID = 81;
+    private static final int WAITING_NOTICE_ID = 88;
     private static final long UNLOCK_RETRY_MS = 50;
     private static final long UNLOCK_RETRY_WINDOW_MS = 500;
     private static final long UNLOCK_FALLBACK_MS = 1000;
@@ -44,7 +45,7 @@ public final class FocusService extends Service {
     private NotificationManager notifications;
     private KeyguardManager keyguard;
     private PowerManager power;
-    private boolean foreground;
+    private int foregroundId;
     private String noticeKey = "";
     private long scheduledWall = Long.MIN_VALUE;
     private long scheduledElapsed = Long.MIN_VALUE;
@@ -59,7 +60,7 @@ public final class FocusService extends Service {
                 handler.removeCallbacks(unlockCheck);
             } else if (Intent.ACTION_USER_PRESENT.equals(action)) {
                 retryUnlockUntil = SystemClock.uptimeMillis() + UNLOCK_RETRY_WINDOW_MS;
-                sync();
+                if (foregroundId != 0) updateSession(true);
             } else if (Intent.ACTION_SCREEN_ON.equals(action)) {
                 sync();
             }
@@ -107,7 +108,7 @@ public final class FocusService extends Service {
         }
         if (BREAK.equals(action) && hasRegularLock(store.state(new SessionClock(this)))) EmergencyBreaks.begin(this);
         if (EXTEND.equals(action)) extendQuick();
-        updateSession();
+        updateSession(false);
         return START_STICKY;
     }
 
@@ -131,10 +132,10 @@ public final class FocusService extends Service {
     }
 
     private void sync() {
-        if (foreground) updateSession();
+        if (foregroundId != 0) updateSession(false);
     }
 
-    private void updateSession() {
+    private void updateSession(boolean justUnlocked) {
         handler.removeCallbacks(tick);
         handler.removeCallbacks(unlockCheck);
         SessionClock clock = new SessionClock(this);
@@ -151,18 +152,23 @@ public final class FocusService extends Service {
                 || !keyguard.isDeviceSecure()) {
             if (state.active.isEmpty()) completion.reconcileHard(clock, state);
             else completion.cancelHard();
-            if (!foreground) publish(notification("Starting Hard Lock", 0, false, false, false));
             setEnforcedUntil(0L);
+            history.stop();
+            if (state.active.isEmpty() && handleCompletion(clock, justUnlocked)) return;
+            if (foregroundId == 0) publish(NOTIFICATION_ID, notification("Starting Hard Lock", 0, false, false, false));
             stopSelf();
             return;
         }
 
+        boolean wasWaiting = foregroundId == WAITING_NOTICE_ID;
+        if (wasWaiting) noticeKey = "";
         long end = state.activeEnd();
         boolean testing = !hasRegularLock(state);
         boolean hasQuick = state.active.stream().anyMatch(window -> window.rule.quick() && !window.rule.test);
         boolean paused = !testing && breaks.until > clock.elapsed;
         long noticeEnd = paused ? clock.wall + Math.min(end - clock.wall, breaks.until - clock.elapsed) : end;
         updateNotice(noticeEnd, hasQuick, breaks, paused, testing);
+        if (wasWaiting && completion.pending() != 0) LockNotifications.showCompletion(this, completion.pending());
         if (!paused && !enforce()) {
             completion.cancelHard();
             return;
@@ -184,6 +190,33 @@ public final class FocusService extends Service {
         }
         scheduleUnlockCheck();
         handler.postDelayed(tick, Math.max(1, Math.min(10_000, state.next - clock.wall)));
+    }
+
+    private boolean handleCompletion(SessionClock clock, boolean justUnlocked) {
+        long remaining = completion.autoOpenRemaining(clock);
+        if (remaining == 0) return false;
+        if (justUnlocked && !keyguard.isKeyguardLocked()) {
+            completion.consumeAutoOpen();
+            if (enforcementChanged == null) {
+                try {
+                    startActivity(new Intent(this, MainActivity.class).setAction(LockNotifications.OPEN_HARD)
+                            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TOP
+                                    | Intent.FLAG_ACTIVITY_SINGLE_TOP));
+                } catch (IllegalStateException | SecurityException blocked) {
+                    Log.i("FocusLock", "Couldn’t open completion after unlock", blocked);
+                }
+            }
+            return false;
+        }
+        if (!keyguard.isKeyguardLocked()) return false;
+
+        if (foregroundId != WAITING_NOTICE_ID) {
+            publish(WAITING_NOTICE_ID,
+                    LockNotifications.completion(this, completion.pending()).setAutoCancel(false).setOngoing(true).build());
+            LockNotifications.hideCompletion(this);
+        }
+        handler.postDelayed(tick, remaining);
+        return true;
     }
 
     private void checkUnlock() {
@@ -219,24 +252,24 @@ public final class FocusService extends Service {
 
     private void updateNotice(long end, boolean hasQuick, EmergencyBreaks breaks, boolean paused, boolean testing) {
         boolean canStop = !testing && breaks.enabled && breaks.remaining() > 0 && !paused;
-        String key = end / 1000 + "/" + hasQuick + "/" + canStop + "/" + paused + "/" + testing;
+        String key = end / 1000 + "/" + hasQuick + "/" + canStop + "/" + paused + "/" + testing + "/" + ClockLabels.is24Hour(this);
         if (key.equals(noticeKey)) return;
         noticeKey = key;
         notifications.cancel(AlarmReceiver.SCHEDULE_NOTICE_ID);
-        publish(notification(testing ? "Hard Lock test" : paused ? "Emergency break" : "Hard Lock", end, hasQuick, canStop, testing));
+        publish(NOTIFICATION_ID, notification(testing ? "Hard Lock test" : paused ? "Emergency break" : "Hard Lock", end, hasQuick, canStop, testing));
     }
 
-    private void publish(Notification notification) {
-        if (foreground) {
-            notifications.notify(NOTIFICATION_ID, notification);
-        } else {
-            if (Build.VERSION.SDK_INT >= 34) {
-                startForeground(NOTIFICATION_ID, notification, ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE);
-            } else {
-                startForeground(NOTIFICATION_ID, notification);
-            }
-            foreground = true;
+    private void publish(int id, Notification notification) {
+        if (foregroundId == id) {
+            notifications.notify(id, notification);
+            return;
         }
+        if (Build.VERSION.SDK_INT >= 34) {
+            startForeground(id, notification, ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE);
+        } else {
+            startForeground(id, notification);
+        }
+        foregroundId = id;
     }
 
     private Notification notification(String title, long end, boolean extend, boolean canStop, boolean testing) {
@@ -266,6 +299,9 @@ public final class FocusService extends Service {
         handler.removeCallbacksAndMessages(null);
         unregisterReceiver(screenState);
         stopForeground(STOP_FOREGROUND_REMOVE);
+        if (foregroundId == WAITING_NOTICE_ID && completion.pending() != 0) {
+            LockNotifications.showCompletion(this, completion.pending());
+        }
         super.onDestroy();
     }
 

@@ -8,10 +8,6 @@ import android.content.Context;
 import android.content.Intent;
 import android.os.SystemClock;
 
-import java.text.DateFormat;
-import java.util.Date;
-import java.util.Locale;
-
 final class LockNotifications {
     static final String OPEN_SCHEDULE = "com.focuslock.app.SHOW_SCHEDULE";
     static final String RULE_ID = "rule_id";
@@ -90,7 +86,7 @@ final class LockNotifications {
                 .setOnlyAlertOnce(true)
                 .setShowWhen(end > 0);
         if (end > 0) {
-            String time = DateFormat.getTimeInstance(DateFormat.SHORT, Locale.ENGLISH).format(new Date(end));
+            String time = ClockLabels.time(context, end);
             builder.setContentText("Ends at " + time)
                     .setWhen(end).setUsesChronometer(true).setChronometerCountDown(true);
         }
@@ -118,17 +114,20 @@ final class LockNotifications {
     static void showCompletion(Context context, int modes) {
         NotificationManager manager = context.getSystemService(NotificationManager.class);
         if (!manager.areNotificationsEnabled()) return;
-        manager.createNotificationChannel(new NotificationChannel(COMPLETION_CHANNEL,
-                "Session completion", NotificationManager.IMPORTANCE_LOW));
+        manager.notify(COMPLETION_ID, completion(context, modes).build());
+    }
+
+    static Notification.Builder completion(Context context, int modes) {
+        context.getSystemService(NotificationManager.class).createNotificationChannel(
+                new NotificationChannel(COMPLETION_CHANNEL, "Session completion", NotificationManager.IMPORTANCE_LOW));
         boolean softOnly = modes == SessionCompletion.SOFT;
-        manager.notify(COMPLETION_ID, new Notification.Builder(context, COMPLETION_CHANNEL)
+        return new Notification.Builder(context, COMPLETION_CHANNEL)
                 .setSmallIcon(R.drawable.ic_notification)
                 .setContentTitle("Focus complete")
                 .setContentText("Your focus session has ended. Tap to see your result.")
                 .setContentIntent(openApp(context, softOnly))
                 .setAutoCancel(true)
-                .setOnlyAlertOnce(true)
-                .build());
+                .setOnlyAlertOnce(true);
     }
 
     static void hideCompletion(Context context) {

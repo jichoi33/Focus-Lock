@@ -178,6 +178,20 @@ final class Rule {
         return state;
     }
 
+    // Zero means the combined locks have no gap within the preview's seven-day horizon.
+    static long finalRelease(List<Rule> rules, Window occurrence, long now, long elapsed, int boot, ZoneId zone) {
+        long start = Math.max(now, occurrence.start);
+        State state = at(rules, start, elapsed + (start - now), boot, zone);
+        long end = Math.max(occurrence.end, state.activeEnd());
+        state.upcoming.sort(java.util.Comparator.comparingLong(window -> window.start));
+        for (Window window : state.upcoming) {
+            if (window.start > end) break;
+            end = Math.max(end, window.end);
+        }
+        long horizon = Instant.ofEpochMilli(start).atZone(zone).plusDays(7).toInstant().toEpochMilli();
+        return end > horizon ? 0L : end;
+    }
+
     static long atMinute(LocalDate day, int minute, ZoneId zone) {
         return day.atTime(minute / 60, minute % 60).atZone(zone).toInstant().toEpochMilli();
     }

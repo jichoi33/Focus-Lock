@@ -98,6 +98,15 @@ internal fun WorkspaceDialogs(activity: MainActivity, state: FocusSnapshot) {
                 else activity.enableNotifications(false)
             })
         }
+        "celebration" -> FocusDialog("Celebration on unlock", close) {
+            Caption("Show the celebration when you first unlock after Hard Lock ends. You can also open it from the completion notification.")
+            if (!activity.autoCelebration && !SessionCompletion.canOpenOnUnlock(activity)) {
+                Caption("In Android settings, select Focus Lock and allow it to display over other apps so it can open the celebration from the background.")
+            }
+            PrimaryButton(if (activity.autoCelebration) "Turn off" else "Enable on unlock", {
+                activity.setAutoCelebration(!activity.autoCelebration)
+            })
+        }
         "breaks" -> BreaksDialog(activity, state, close)
         "schedule" -> FocusDialog("Add schedule", close) {
             GroupCard {
@@ -133,20 +142,20 @@ internal fun WorkspaceDialogs(activity: MainActivity, state: FocusSnapshot) {
     }
     activity.scheduleConfirmation?.let { confirmation ->
         val dismiss = { activity.scheduleConfirmation = null }
-        FocusDialog(if (confirmation.active == null) "Confirm repeating lock" else "This lock can start now", dismiss) {
+        FocusDialog(if (confirmation.active == null) "Review schedule" else "This lock can start now", dismiss) {
             if (confirmation.continuous) {
                 Text("This schedule runs every day without a planned gap between locks.",
                     color = MaterialTheme.colorScheme.error)
             }
-            confirmation.active?.let { window ->
-                Text("Start now", style = MaterialTheme.typography.titleMedium)
-                Caption("Locks immediately until ${scheduleDateLabel(window.end)}.")
+            Column(Modifier.heightIn(max = (dialogBodyHeight() - 145.dp).coerceAtLeast(120.dp))
+                .verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                confirmation.active?.let { SchedulePreviewCard(activity, "Start now", it, startsNow = true) }
+                confirmation.next?.let {
+                    val title = if (confirmation.enabled) "Next occurrence" else "Lock window if enabled"
+                    SchedulePreviewCard(activity, title, it)
+                }
             }
             val next = confirmation.next
-            if (next != null) {
-                Text("Next occurrence", style = MaterialTheme.typography.titleMedium)
-                Caption(windowLabel(next))
-            }
             if (confirmation.active != null) {
                 PrimaryButton("Start now", { confirmation.apply(false) })
                 if (next != null) {
@@ -206,7 +215,7 @@ private fun SettingsDialog(activity: MainActivity, state: FocusSnapshot, close: 
             verticalArrangement = Arrangement.spacedBy(12.dp)) {
             val b = state.breaks
             Text("Session preferences", style = MaterialTheme.typography.titleMedium)
-            GroupCard { ActionRow("Emergency breaks", if (b.enabled) "${b.minutes} min each · ${b.limit} per session" else "Off", icon = "Clock") {
+            GroupCard { ActionRow("Emergency breaks", if (b.enabled) "${b.minutes} min each, ${b.limit} per session" else "Off", icon = "Clock") {
                 activity.sheet = "breaks"
             } }
             if (!state.secure || !state.admin || !state.alarms) {
@@ -227,6 +236,10 @@ private fun SettingsDialog(activity: MainActivity, state: FocusSnapshot, close: 
             }
 
             GroupCard {
+                ActionRow("Celebration on unlock", if (activity.autoCelebration) "On" else "Off") {
+                    activity.sheet = "celebration"
+                }
+                InsetDivider()
                 ActionRow("Lock screen notifications", "Hard Lock countdown and controls") {
                     activity.sheet = "hard_notifications"
                 }
@@ -407,30 +420,39 @@ private fun ScheduleDialog(activity: MainActivity, rule: Rule) {
     var timeField by remember { mutableStateOf<String?>(null) }
     var date by remember { mutableStateOf(Instant.ofEpochMilli(firstAt).atZone(ZoneId.systemDefault()).toLocalDate()) }
     var now by remember { mutableLongStateOf(System.currentTimeMillis()) }
-    LaunchedEffect(repeating) {
-        if (repeating) while (true) {
+    LaunchedEffect(Unit) {
+        while (true) {
             kotlinx.coroutines.delay(1_000)
             now = System.currentTimeMillis()
         }
     }
-    val draft = if (repeating && days != 0) rule.withRepeatTimes(days, startMinute, endMinute) else null
-    val zone = ZoneId.systemDefault()
-    val preview = remember(days, startMinute, endMinute, now, zone) {
-        draft?.let { Rule.at(listOf(it.apply { enabled = true }), now, zone) }
+    val otherRules = activity.snapshot?.rules
+    val preview = remember(rule, days, startMinute, endMinute, firstAt, duration, now, otherRules) {
+        val draft = if (repeating) {
+            if (days == 0) null else rule.withRepeatTimes(days, startMinute, endMinute)
+        } else {
+            duration.total?.let { minutes ->
+                rule.copy().apply {
+                    from = firstAt
+                    to = firstAt + minutes * Rule.MINUTE
+                }.takeIf { it.to > now }
+            }
+        }
+        draft?.let(activity::previewSchedule)
     }
 
     FocusDialog(if (repeating) "Repeating lock" else "One-time lock", close, {
         if (repeating) activity.saveRepeatingSchedule(rule, name, days, startMinute, endMinute)
         else activity.saveOneTimeSchedule(rule, name, firstAt, duration)
-    }, "Save") {
+    }, "Review schedule") {
         Column(Modifier.fillMaxWidth().heightIn(max = dialogBodyHeight()).verticalScroll(rememberScrollState()),
             verticalArrangement = Arrangement.spacedBy(12.dp)) {
             OutlinedTextField(name, { name = it }, label = { Text("Schedule name") }, singleLine = true, modifier = Modifier.fillMaxWidth())
             if (repeating) {
                 Text("Lock window", style = MaterialTheme.typography.titleMedium)
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    ScheduleTimeField("Starts at", startMinute, Modifier.weight(1f)) { timeField = "Start time" }
-                    ScheduleTimeField("Ends at", endMinute, Modifier.weight(1f)) { timeField = "End time" }
+                    ScheduleTimeField("Starts at", activity.timeLabel(startMinute), Modifier.weight(1f)) { timeField = "Start time" }
+                    ScheduleTimeField("Ends at", activity.timeLabel(endMinute), Modifier.weight(1f)) { timeField = "End time" }
                 }
                 when {
                     endMinute == startMinute -> Caption("Ends at the same time the next day.")
@@ -449,25 +471,20 @@ private fun ScheduleDialog(activity: MainActivity, rule: Rule) {
                     }
                 }
                 if (days == 0) Caption("Choose at least one start day.")
-                preview?.let { state ->
-                    if (draft?.repeatsWithoutGap() == true) {
-                        Text("Runs every day without a planned gap.", color = MaterialTheme.colorScheme.error,
-                            style = MaterialTheme.typography.bodyMedium)
-                    }
-                    state.latestActive()?.let {
-                        if (rule.enabled) Caption("If started now, this lock ends ${scheduleDateLabel(it.end)}.")
-                    }
-                    state.nextStart?.let {
-                        Text(if (rule.enabled) "Next occurrence" else "Next occurrence if enabled",
-                            style = MaterialTheme.typography.titleMedium)
-                        Caption(windowLabel(it))
-                    }
+                if (days == 127 && startMinute == endMinute) {
+                    Text("Runs every day without a planned gap.", color = MaterialTheme.colorScheme.error,
+                        style = MaterialTheme.typography.bodyMedium)
                 }
             } else {
                 GroupCard {
-                    ActionRow("Start", value = dateLabel(firstAt)) { dateDialog = true }
+                    ActionRow("Start", value = activity.dateLabel(firstAt)) { dateDialog = true }
                 }
                 DurationFields(duration) { duration = it }
+            }
+            preview?.let { (active, next) ->
+                val ifEnabled = if (rule.enabled) "" else " if enabled"
+                active?.let { SchedulePreviewCard(activity, "If started now$ifEnabled", it, startsNow = true) }
+                next?.let { SchedulePreviewCard(activity, "Next occurrence$ifEnabled", it) }
             }
             if (rule.name != null) {
                 TextButton(onClick = { activity.deleteSchedule(rule) }) {
@@ -491,7 +508,7 @@ private fun ScheduleDialog(activity: MainActivity, rule: Rule) {
             title == "End time" -> endMinute
             else -> startMinute
         }
-        ScheduleTimeDialog(title, initial, { timeField = null }) { selected ->
+        ScheduleTimeDialog(title, initial, activity.use24Hour, { timeField = null }) { selected ->
             when {
                 !repeating -> firstAt = Rule.atMinute(date, selected, ZoneId.systemDefault())
                 title == "End time" -> endMinute = selected
@@ -503,13 +520,36 @@ private fun ScheduleDialog(activity: MainActivity, rule: Rule) {
 }
 
 @Composable
-private fun ScheduleTimeField(label: String, minute: Int, modifier: Modifier, onClick: () -> Unit) {
+private fun SchedulePreviewCard(activity: MainActivity, title: String, preview: SchedulePreview, startsNow: Boolean = false) {
+    GroupCard {
+        Column(Modifier.fillMaxWidth().padding(14.dp), verticalArrangement = Arrangement.spacedBy(9.dp)) {
+            Text(title, style = MaterialTheme.typography.titleMedium)
+            SchedulePreviewLine("Starts", if (startsNow) "Now" else activity.dateLabel(preview.window.start))
+            if (preview.release != preview.window.end) {
+                SchedulePreviewLine("This lock ends", activity.dateLabel(preview.window.end))
+            }
+            SchedulePreviewLine("Phone unlocks", if (preview.release == 0L) "No gap in the next 7 days"
+                else activity.dateLabel(preview.release))
+        }
+    }
+}
+
+@Composable
+private fun SchedulePreviewLine(label: String, value: String) {
+    Column {
+        Caption(label)
+        Text(value, style = MaterialTheme.typography.bodyLarge)
+    }
+}
+
+@Composable
+private fun ScheduleTimeField(label: String, time: String, modifier: Modifier, onClick: () -> Unit) {
     val colors = MaterialTheme.colorScheme
     Surface(onClick = onClick, modifier = modifier, shape = RoundedCornerShape(16.dp),
         color = colors.primaryContainer, contentColor = colors.onPrimaryContainer) {
         Column(Modifier.padding(horizontal = 14.dp, vertical = 10.dp)) {
             Text(label, style = MaterialTheme.typography.labelMedium)
-            Text(timeLabel(minute), style = MaterialTheme.typography.titleLarge)
+            Text(time, style = MaterialTheme.typography.titleLarge)
         }
     }
 }
@@ -530,8 +570,8 @@ private fun DateDialog(date: LocalDate, dismiss: () -> Unit, onDate: (LocalDate)
 }
 
 @Composable
-private fun ScheduleTimeDialog(title: String, initial: Int, dismiss: () -> Unit, onTime: (Int) -> Unit) {
-    val picker = rememberTimePickerState(initialHour = initial / 60, initialMinute = initial % 60, is24Hour = true)
+private fun ScheduleTimeDialog(title: String, initial: Int, use24Hour: Boolean, dismiss: () -> Unit, onTime: (Int) -> Unit) {
+    val picker = rememberTimePickerState(initialHour = initial / 60, initialMinute = initial % 60, is24Hour = use24Hour)
     FocusDialog(title, dismiss, { onTime(picker.hour * 60 + picker.minute) }) {
         Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) { TimeInput(picker) }
     }

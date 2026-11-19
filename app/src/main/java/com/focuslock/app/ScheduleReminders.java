@@ -11,11 +11,7 @@ import android.content.SharedPreferences;
 import android.net.Uri;
 import android.service.notification.StatusBarNotification;
 
-import java.time.Instant;
-import java.time.ZoneId;
-import java.time.format.DateTimeFormatter;
 import java.util.HashSet;
-import java.util.Locale;
 import java.util.Set;
 
 final class ScheduleReminders {
@@ -24,7 +20,6 @@ final class ScheduleReminders {
     private static final int ALARM_CODE = 73;
     private static final int NOTIFICATION_ID = 87;
     private static final long LEAD_TIME = 5 * Rule.MINUTE;
-    private static final DateTimeFormatter TIME = DateTimeFormatter.ofPattern("EEE, MMM d · HH:mm", Locale.ENGLISH);
 
     private ScheduleReminders() {}
 
@@ -106,9 +101,9 @@ final class ScheduleReminders {
     }
 
     private static void notify(Context context, NotificationManager manager, String key, Rule.Window window, long now) {
-        ZoneId zone = ZoneId.systemDefault();
-        String range = TIME.format(Instant.ofEpochMilli(window.start).atZone(zone)) + " → "
-                + TIME.format(Instant.ofEpochMilli(window.end).atZone(zone));
+        boolean use24Hour = ClockLabels.is24Hour(context);
+        String range = ClockLabels.dateTime(window.start, use24Hour) + " → "
+                + ClockLabels.dateTime(window.end, use24Hour);
         String name = window.rule.name == null || window.rule.name.trim().isEmpty() ? "Scheduled Hard Lock" : window.rule.name;
         Intent openSchedule = new Intent(context, MainActivity.class).setAction(LockNotifications.OPEN_SCHEDULE)
                 .setData(Uri.fromParts("focuslock", key, null))

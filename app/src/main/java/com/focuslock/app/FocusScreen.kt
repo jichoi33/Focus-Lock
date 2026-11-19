@@ -131,7 +131,7 @@ private fun HardWorkspace(activity: MainActivity, state: FocusSnapshot) {
             else -> "Hard Lock pending"
         }
         RunningCard(title, if (paused) minOf(state.hardEndElapsed, state.breaks.until) else state.hardEndElapsed,
-            if (paused) breakDetail(state.hardEndElapsed, state.breaks.until) else "Phone locked until ${dateLabel(state.hard.activeEnd())}") {
+            if (paused) breakDetail(state.hardEndElapsed, state.breaks.until) else "Phone locked until ${activity.dateLabel(state.hard.activeEnd())}") {
             if (onlyTest) TextButton(onClick = { activity.hardAction(FocusService.END_TEST) }) { Text("End test") }
             if (!state.hardEnforced && state.admin && state.secure) TextButton(onClick = activity::refreshHard) { Text("Activate") }
             if (quick != null) TextButton(onClick = { activity.hardAction(FocusService.EXTEND) }) { Text(if (paused) "Add 10 min to lock" else "Add 10 min") }
@@ -154,7 +154,7 @@ private fun HardWorkspace(activity: MainActivity, state: FocusSnapshot) {
     ScheduleHeading(activity::openNewSchedule)
     val upcoming = state.hard.nextStart
     if (state.hard.active.isEmpty() && upcoming != null) {
-        Caption("Next lock  ${windowLabel(upcoming)}")
+        Caption("Next lock  ${activity.windowLabel(upcoming)}")
     }
     val scheduled = state.rules.filterNot { it.quick() }
     if (scheduled.isEmpty()) {
@@ -162,7 +162,7 @@ private fun HardWorkspace(activity: MainActivity, state: FocusSnapshot) {
     } else {
         scheduled.forEach { rule ->
             val active = state.hard.active.any { it.rule.id == rule.id }
-            ScheduleCard(rule, active, { activity.schedule = rule }, { activity.toggleSchedule(rule) },
+            ScheduleCard(activity, rule, active, { activity.schedule = rule }, { activity.toggleSchedule(rule) },
                 { activity.deleteSchedule(rule) })
         }
     }
@@ -206,23 +206,24 @@ private fun BreakRow(activity: MainActivity, state: FocusSnapshot) {
     val left = b.remaining()
     val available = left > 0 && b.until <= SystemClock.elapsedRealtime()
     if (available) GroupCard {
-        ActionRow("Emergency break", "${b.minutes} min · $left of ${b.limit} left", icon = "Clock", onClick = activity::offerBreak)
+        ActionRow("Emergency break", "${b.minutes} min each, $left of ${b.limit} left", icon = "Clock", onClick = activity::offerBreak)
     } else Caption(if (left == 0) "All ${b.limit} breaks used for this session." else "$left of ${b.limit} breaks left.")
 }
 
 @Composable
-private fun ScheduleCard(rule: Rule, active: Boolean, onEdit: () -> Unit, onToggle: () -> Unit, onDelete: () -> Unit) {
+private fun ScheduleCard(activity: MainActivity, rule: Rule, active: Boolean, onEdit: () -> Unit, onToggle: () -> Unit, onDelete: () -> Unit) {
     val ended = !rule.repeats() && rule.to <= System.currentTimeMillis()
     GroupCard {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(5.dp)) {
             Text(rule.name, style = MaterialTheme.typography.titleMedium)
             if (rule.repeats()) {
-                Text("${timeLabel(rule.startMinute)} – ${timeLabel(rule.repeatEndMinute())}",
+                Text("${activity.timeLabel(rule.startMinute)} – ${activity.timeLabel(rule.repeatEndMinute())}",
                     style = MaterialTheme.typography.headlineSmall)
-                val endDay = if (rule.endsNextDay()) " · Ends next day" else ""
-                Caption(daysLabel(rule.days) + endDay)
+                Caption(daysLabel(rule.days))
+                if (rule.endsNextDay()) Caption("Ends the next day")
             } else {
-                Caption("${dateLabel(rule.from)} · ${durationLabel(rule.requestedDuration())}")
+                Caption(activity.dateLabel(rule.from))
+                Caption(durationLabel(rule.requestedDuration()))
             }
             if (active) {
                 Text("Active", color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.labelMedium)
@@ -245,8 +246,8 @@ private fun SoftWorkspace(activity: MainActivity, state: FocusSnapshot) {
     if (session.active(SystemClock.elapsedRealtime())) {
         val summary = when {
             session.allowlist && session.apps.isEmpty() -> "Essential apps only"
-            session.allowlist -> "Allowlist · " + quantity(session.apps.size, "app")
-            else -> "Blocklist · " + quantity(session.apps.size, "app") + " · " + quantity(session.sites.size, "site")
+            session.allowlist -> "Allowlist with " + quantity(session.apps.size, "app")
+            else -> "Blocklist with " + quantity(session.apps.size, "app") + " and " + quantity(session.sites.size, "site")
         }
         val title = when {
             session.test -> "Soft Lock test"
@@ -288,7 +289,7 @@ private fun SoftWorkspace(activity: MainActivity, state: FocusSnapshot) {
                 Column(Modifier.weight(1f)) {
                     Text(if (activity.allowlist) "Allowlist" else "Blocklist", style = MaterialTheme.typography.titleMedium)
                     Caption(if (empty) "Choose apps or websites" else if (activity.allowlist && count == 0) "Essential apps only"
-                        else if (activity.allowlist) quantity(count, "app") else quantity(count, "app") + " · " + quantity(activity.blockedSites.size, "site"))
+                        else if (activity.allowlist) quantity(count, "app") else quantity(count, "app") + ", " + quantity(activity.blockedSites.size, "site"))
                 }
                 Symbol("Chev", tint = MaterialTheme.colorScheme.outline)
             }

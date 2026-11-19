@@ -27,11 +27,8 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
-import java.time.Instant
-import java.time.LocalTime
 import java.time.ZoneId
 import java.time.ZonedDateTime
-import java.time.format.DateTimeFormatter
 import java.util.Locale
 
 internal enum class FocusMode(val label: String) {
@@ -53,10 +50,17 @@ internal data class DurationInput(val hours: String = "0", val minutes: String =
 
 internal data class Prompt(val title: String, val text: String, val action: String, val confirm: () -> Unit)
 
+internal data class SchedulePreview(val window: Rule.Window, val release: Long) {
+    fun matches(other: SchedulePreview?) =
+        other != null && window.start == other.window.start && window.end == other.window.end &&
+            release / Rule.MINUTE == other.release / Rule.MINUTE
+}
+
 internal data class ScheduleConfirmation(
     val continuous: Boolean,
-    val active: Rule.Window?,
-    val next: Rule.Window?,
+    val enabled: Boolean,
+    val active: SchedulePreview?,
+    val next: SchedulePreview?,
     val apply: (Boolean) -> Unit
 )
 
@@ -79,22 +83,12 @@ internal data class FocusSnapshot(
 )
 
 internal val focusDays = listOf("Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun")
-private val calendarFormat = DateTimeFormatter.ofPattern("MMM d, h:mm a", Locale.ENGLISH)
-private val scheduleDateFormat = DateTimeFormatter.ofPattern("EEE, MMM d · HH:mm", Locale.ENGLISH)
-private val timeFormat = DateTimeFormatter.ofPattern("HH:mm", Locale.ROOT)
-
-internal fun dateLabel(time: Long): String = Instant.ofEpochMilli(time).atZone(ZoneId.systemDefault()).format(calendarFormat)
-internal fun scheduleDateLabel(time: Long): String =
-    Instant.ofEpochMilli(time).atZone(ZoneId.systemDefault()).format(scheduleDateFormat)
-internal fun windowLabel(window: Rule.Window): String =
-    "${scheduleDateLabel(window.start)} → ${scheduleDateLabel(window.end)}"
-internal fun timeLabel(minute: Int): String = LocalTime.of(minute / 60, minute % 60).format(timeFormat)
 internal fun daysLabel(mask: Int): String = when (mask) {
     0 -> "Choose days"
     31 -> "Weekdays"
     96 -> "Weekends"
     127 -> "Every day"
-    else -> focusDays.filterIndexed { index, _ -> mask and (1 shl index) != 0 }.joinToString(" · ")
+    else -> focusDays.filterIndexed { index, _ -> mask and (1 shl index) != 0 }.joinToString(", ")
 }
 internal fun durationLabel(total: Int): String = when {
     total < 60 -> "${total} min"
@@ -118,6 +112,16 @@ class MainActivity : ComponentActivity() {
     private val softChanged = SharedPreferences.OnSharedPreferenceChangeListener { _, key ->
         if (key == "end_elapsed") update()
     }
+
+    internal var autoCelebration by mutableStateOf(false)
+        private set
+
+    internal var use24Hour by mutableStateOf(false)
+        private set
+
+    internal fun dateLabel(time: Long) = ClockLabels.dateTime(time, use24Hour)
+    internal fun timeLabel(minute: Int) = ClockLabels.time(minute, use24Hour)
+    internal fun windowLabel(window: Rule.Window) = "${dateLabel(window.start)} → ${dateLabel(window.end)}"
 
     internal var snapshot by mutableStateOf<FocusSnapshot?>(null)
         private set
@@ -275,6 +279,8 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun update() {
+        use24Hour = ClockLabels.is24Hour(this)
+        autoCelebration = completionStore.autoEnabled()
         val clock = SessionClock(this)
         val rules = hardStore.rules()
         softStore.checkCompletion(clock, completionStore)
@@ -331,6 +337,14 @@ class MainActivity : ComponentActivity() {
         if (current.softNotifications && current.blockingConnected && current.soft.active(SystemClock.elapsedRealtime())) {
             LockNotifications.showSoft(this, current.soft)
         }
+    }
+
+    internal fun setAutoCelebration(enabled: Boolean) {
+        completionStore.setAutoEnabled(enabled)
+        if (enabled && !SessionCompletion.canOpenOnUnlock(this)) {
+            openSettings(Settings.ACTION_MANAGE_OVERLAY_PERMISSION, app = true)
+        }
+        update()
     }
 
     internal fun openSettings(action: String, app: Boolean = false) {
@@ -562,7 +576,7 @@ class MainActivity : ComponentActivity() {
         if (days == 0) return notify("Choose at least one day.")
         val draft = rule.withRepeatTimes(days, start, end)
         draft.name = name.trim().ifBlank { "Repeating lock" }
-        applySchedule(draft)
+        applySchedule(draft, review = true)
     }
 
     internal fun saveOneTimeSchedule(rule: Rule, name: String, from: Long, duration: DurationInput) {
@@ -571,31 +585,50 @@ class MainActivity : ComponentActivity() {
         draft.from = from
         draft.to = from + minutes * Rule.MINUTE
         draft.name = name.trim().ifBlank { "One-time lock" }
-        applySchedule(draft)
+        applySchedule(draft, review = true)
     }
 
-    private fun applySchedule(draft: Rule, confirmed: ScheduleConfirmation? = null, defer: Boolean = false) {
-        val now = System.currentTimeMillis()
-        if (!draft.repeats() && draft.to <= now) {
+    internal fun previewSchedule(draft: Rule): Pair<SchedulePreview?, SchedulePreview?> =
+        previewSchedule(draft.copy().apply { enabled = true }, SessionClock(this))
+
+    private fun previewSchedule(draft: Rule, clock: SessionClock): Pair<SchedulePreview?, SchedulePreview?> {
+        val zone = ZoneId.systemDefault()
+        val state = Rule.at(listOf(draft), clock.wall, clock.elapsed, clock.boot, zone)
+        val rules = hardStore.rules().filterNot { it.id == draft.id } + draft
+        fun preview(window: Rule.Window?) = window?.let {
+            SchedulePreview(it, Rule.finalRelease(rules, it, clock.wall, clock.elapsed, clock.boot, zone))
+        }
+        return preview(state.latestActive()) to preview(state.nextStart)
+    }
+
+    private fun applySchedule(
+        draft: Rule,
+        review: Boolean = false,
+        confirmed: ScheduleConfirmation? = null,
+        defer: Boolean = false
+    ) {
+        val clock = SessionClock(this)
+        if (!draft.repeats() && draft.to <= clock.wall) {
             return notify("Choose a time and duration so the lock ends in the future.")
         }
         if (draft.enabled && !requireHard(exact = true)) return
-        val state = Rule.at(listOf(draft), now, ZoneId.systemDefault())
-        val active = state.latestActive()
+        val (current, upcoming) = previewSchedule(draft.copy().apply { enabled = true }, clock)
+        val active = current.takeIf { draft.enabled }
+        val next = upcoming ?: current.takeUnless { draft.enabled }
         val continuous = draft.enabled && draft.repeatsWithoutGap()
-        val sameOccurrence = active?.start == confirmed?.active?.start && active?.end == confirmed?.active?.end
-        val confirmedOccurrence = confirmed != null && (active == null || sameOccurrence)
-        if ((active != null || continuous) && !confirmedOccurrence) {
-            val proposal = ScheduleConfirmation(continuous, active, state.nextStart) { nextOnly ->
+        val sameActive = active?.matches(confirmed?.active) ?: (confirmed?.active == null)
+        val sameNext = next?.matches(confirmed?.next) ?: (confirmed?.next == null)
+        if ((review || active != null || continuous) && !(confirmed != null && sameActive && sameNext)) {
+            val proposal = ScheduleConfirmation(continuous, draft.enabled, active, next) { nextOnly ->
                 val confirmedSelection = scheduleConfirmation
                 scheduleConfirmation = null
-                applySchedule(draft, confirmedSelection, nextOnly)
+                applySchedule(draft, review, confirmedSelection, nextOnly)
             }
             scheduleConfirmation = proposal
             return
         }
         if (defer && active != null) {
-            draft.skippedThrough = maxOf(draft.skippedThrough, active.start + 1)
+            draft.skippedThrough = maxOf(draft.skippedThrough, active.window.start + 1)
         }
         scheduleConfirmation = null
         hardStore.put(draft)
