@@ -7,6 +7,7 @@ import android.os.SystemClock;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneId;
+import java.util.Collections;
 import java.util.HashSet;
 import java.util.Map;
 import java.util.Set;
@@ -14,40 +15,65 @@ import java.util.Set;
 /** Records elapsed time only while an enforcement service has observed a real session. */
 final class FocusHistory {
     private static final long SAVE_INTERVAL = 30_000;
+    private static final String RECENT_IDS = "protected_session_ids";
+    private static FocusHistory hardTracker;
+    private static FocusHistory softTracker;
     private final SharedPreferences prefs;
+    private final boolean soft;
     private long recordedThrough;
     private long protectionEnd;
-    private Set<String> sessions = java.util.Collections.emptySet();
+    private Map<String, Long> sessionEnds = Collections.emptyMap();
 
     FocusHistory(Context context, boolean soft) {
+        this.soft = soft;
         prefs = context.getSharedPreferences(soft ? "soft_history" : "hard_history", Context.MODE_PRIVATE);
     }
 
-    void sample(long elapsed, long end, Set<String> activeSessions) {
+    // Enforcement and completion run on the same main thread. Flush before reading a result.
+    static long sessionMillis(Context context, boolean soft, String id, long now) {
+        if (id == null) return 0L;
+        FocusHistory tracker = soft ? softTracker : hardTracker;
+        if (tracker == null) tracker = new FocusHistory(context, soft);
+        tracker.save(now);
+        return tracker.prefs.getLong("protected/" + id, 0L);
+    }
+
+    void sample(long elapsed, long end, Map<String, Long> activeSessions) {
+        if (soft) softTracker = this;
+        else hardTracker = this;
         boolean sameWindow = end == protectionEnd
                 || (end > 0 && protectionEnd > 0 && Math.abs(end - protectionEnd) < 1000);
-        if (sameWindow && sessions.equals(activeSessions) && (end == 0 || elapsed - recordedThrough < SAVE_INTERVAL)) {
+        if (sameWindow && sessionEnds.keySet().equals(activeSessions.keySet())
+                && (end == 0 || elapsed - recordedThrough < SAVE_INTERVAL)) {
             protectionEnd = end;
+            sessionEnds = activeSessions;
             return;
         }
         save(elapsed);
         protectionEnd = end;
         recordedThrough = elapsed;
-        sessions = activeSessions;
-        if (!activeSessions.isEmpty()) {
-            Set<String> seen = new HashSet<>(prefs.getStringSet("started_ids", java.util.Collections.emptySet()));
-            int before = seen.size();
-            seen.addAll(activeSessions);
-            int added = seen.size() - before;
-            if (added > 0) {
-                SharedPreferences.Editor update = prefs.edit();
-                putTotal(update, LocalDate.now(), "sessions", added);
-                update.putStringSet("started_ids", seen).apply();
-            }
+        boolean newSessions = !activeSessions.isEmpty() && !sessionEnds.keySet().equals(activeSessions.keySet());
+        sessionEnds = activeSessions;
+        if (!newSessions) return;
+
+        Set<String> activeIds = activeSessions.keySet();
+        SharedPreferences.Editor update = prefs.edit();
+        for (String previous : prefs.getStringSet(RECENT_IDS, Collections.emptySet())) {
+            if (!activeIds.contains(previous)) update.remove("protected/" + previous);
         }
+        update.putStringSet(RECENT_IDS, new HashSet<>(activeIds));
+        Set<String> seen = new HashSet<>(prefs.getStringSet("started_ids", Collections.emptySet()));
+        int before = seen.size();
+        seen.addAll(activeIds);
+        int added = seen.size() - before;
+        if (added > 0) {
+            putTotal(update, LocalDate.now(), "sessions", added);
+            update.putStringSet("started_ids", seen);
+        }
+        update.apply();
     }
 
-    void save(long now) {
+    private void save(long now) {
         long stop = Math.min(protectionEnd, now);
         if (stop <= recordedThrough) return;
         ZoneId zone = ZoneId.systemDefault();
@@ -60,6 +86,12 @@ final class FocusHistory {
             long next = Math.min(endWall, boundary);
             putTotal(update, day, "time", next - cursor);
             cursor = next;
+        }
+        for (Map.Entry<String, Long> session : sessionEnds.entrySet()) {
+            long duration = Math.min(stop, session.getValue()) - recordedThrough;
+            if (duration <= 0) continue;
+            String key = "protected/" + session.getKey();
+            update.putLong(key, prefs.getLong(key, 0L) + duration);
         }
         recordedThrough = stop;
         update.apply();
@@ -107,6 +139,8 @@ final class FocusHistory {
     }
 
     void stop() {
-        sample(SystemClock.elapsedRealtime(), 0, java.util.Collections.emptySet());
+        sample(SystemClock.elapsedRealtime(), 0, Collections.emptyMap());
+        if (soft) softTracker = null;
+        else hardTracker = null;
     }
 }

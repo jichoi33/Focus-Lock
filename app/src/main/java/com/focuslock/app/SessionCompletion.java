@@ -12,6 +12,9 @@ final class SessionCompletion {
     static final String PENDING = "pending";
     static final String HARD_RESULT = "hard_result";
     static final String SOFT_RESULT = "soft_result";
+    static final String HARD_TIME = "hard_time";
+    static final String SOFT_TIME = "soft_time";
+    private static final String HARD_ID = "hard_id";
     private static final String HARD_NAME = "hard_name";
     private static final String HARD_WALL = "hard_wall";
     private static final String HARD_ELAPSED = "hard_elapsed";
@@ -34,12 +37,12 @@ final class SessionCompletion {
         return prefs.getInt(PENDING, 0);
     }
 
-    String description() {
-        int modes = pending();
-        String hard = (modes & HARD) != 0 ? prefs.getString(HARD_RESULT, "") : "";
-        String soft = (modes & SOFT) != 0 ? prefs.getString(SOFT_RESULT, "") : "";
-        if (hard.isEmpty()) return soft;
-        return soft.isEmpty() ? hard : hard + "\n" + soft;
+    String description(int mode) {
+        return prefs.getString(mode == HARD ? HARD_RESULT : SOFT_RESULT, "");
+    }
+
+    long protectedMillis(int mode) {
+        return prefs.getLong(mode == HARD ? HARD_TIME : SOFT_TIME, 0L);
     }
 
     void observe(SharedPreferences.OnSharedPreferenceChangeListener listener) {
@@ -51,7 +54,7 @@ final class SessionCompletion {
     }
 
     void dismiss() {
-        prefs.edit().remove(PENDING).remove(HARD_RESULT).remove(SOFT_RESULT).remove(HARD_AUTO_UNTIL).apply();
+        prefs.edit().remove(PENDING).remove(HARD_RESULT).remove(SOFT_RESULT).remove(HARD_TIME).remove(SOFT_TIME).remove(HARD_AUTO_UNTIL).apply();
         LockNotifications.hideCompletion(context);
     }
 
@@ -89,12 +92,14 @@ final class SessionCompletion {
             return;
         }
         String name = latest.rule.quick() ? "Quick focus session" : latest.rule.name;
-        if (prefs.getLong(HARD_WALL, 0) != latest.end
+        String id = latest.key();
+        if (!id.equals(prefs.getString(HARD_ID, null))
+                || prefs.getLong(HARD_WALL, 0) != latest.end
                 || prefs.getLong(HARD_ELAPSED, 0) != latest.elapsedEnd
                 || prefs.getInt(HARD_BOOT, -1) != clock.boot
                 || !java.util.Objects.equals(prefs.getString(HARD_NAME, null), name)) {
             prefs.edit().putLong(HARD_WALL, latest.end).putLong(HARD_ELAPSED, latest.elapsedEnd)
-                    .putInt(HARD_BOOT, clock.boot).putString(HARD_NAME, name).apply();
+                    .putInt(HARD_BOOT, clock.boot).putString(HARD_NAME, name).putString(HARD_ID, id).apply();
         }
     }
 
@@ -110,7 +115,8 @@ final class SessionCompletion {
             if (age < AUTO_WINDOW && autoEnabled()) {
                 edit.putLong(HARD_AUTO_UNTIL, clock.wall - age + AUTO_WINDOW);
             }
-            record(edit.putString(HARD_RESULT, result), HARD);
+            long protectedMillis = FocusHistory.sessionMillis(context, false, prefs.getString(HARD_ID, null), clock.elapsed);
+            record(edit.putString(HARD_RESULT, result).putLong(HARD_TIME, protectedMillis), HARD);
         } else {
             edit.apply();
         }
@@ -121,7 +127,7 @@ final class SessionCompletion {
     }
 
     private SharedPreferences.Editor clearHardDeadline() {
-        return prefs.edit().remove(HARD_WALL).remove(HARD_ELAPSED).remove(HARD_BOOT).remove(HARD_NAME);
+        return prefs.edit().remove(HARD_WALL).remove(HARD_ELAPSED).remove(HARD_BOOT).remove(HARD_NAME).remove(HARD_ID);
     }
 
     void checkSoft(SessionClock clock, long endWall, long endElapsed, int boot, String sessionId, boolean allowlist) {
@@ -131,7 +137,9 @@ final class SessionCompletion {
         if (endWall <= 0 || age < 0) return;
         SharedPreferences.Editor edit = prefs.edit().putString(SOFT_ID, sessionId);
         if (age < RECENT) {
-            record(edit.putString(SOFT_RESULT, allowlist ? "Allowlist session" : "Blocklist session"), SOFT);
+            long protectedMillis = FocusHistory.sessionMillis(context, true, sessionId, clock.elapsed);
+            record(edit.putString(SOFT_RESULT, allowlist ? "Allowlist session" : "Blocklist session")
+                    .putLong(SOFT_TIME, protectedMillis), SOFT);
         } else {
             edit.apply();
         }

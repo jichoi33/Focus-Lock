@@ -121,6 +121,28 @@ final class Rule {
             return end;
         }
 
+        Release releaseAfter(long initialEnd, long start, ZoneId zone) {
+            long end = initialEnd;
+            Window extension = null;
+            for (Window window : active) {
+                if (window.end > end) {
+                    end = window.end;
+                    extension = window;
+                }
+            }
+            List<Window> ordered = new ArrayList<>(upcoming);
+            ordered.sort(java.util.Comparator.comparingLong(window -> window.start));
+            for (Window window : ordered) {
+                if (window.start > end) break;
+                if (window.end > end) {
+                    end = window.end;
+                    extension = window;
+                }
+            }
+            long horizon = Instant.ofEpochMilli(start).atZone(zone).plusDays(7).toInstant().toEpochMilli();
+            return new Release(end > horizon ? 0L : end, extension);
+        }
+
         void consider(Window window, long now) {
             if (window.start >= window.end || window.end <= now
                     || window.start < window.rule.skippedThrough) {
@@ -178,18 +200,21 @@ final class Rule {
         return state;
     }
 
-    // Zero means the combined locks have no gap within the preview's seven-day horizon.
+    static final class Release {
+        // Zero means there is no gap within seven days.
+        final long end;
+        final Window extension;
+
+        Release(long end, Window extension) {
+            this.end = end;
+            this.extension = extension;
+        }
+    }
+
     static long finalRelease(List<Rule> rules, Window occurrence, long now, long elapsed, int boot, ZoneId zone) {
         long start = Math.max(now, occurrence.start);
-        State state = at(rules, start, elapsed + (start - now), boot, zone);
-        long end = Math.max(occurrence.end, state.activeEnd());
-        state.upcoming.sort(java.util.Comparator.comparingLong(window -> window.start));
-        for (Window window : state.upcoming) {
-            if (window.start > end) break;
-            end = Math.max(end, window.end);
-        }
-        long horizon = Instant.ofEpochMilli(start).atZone(zone).plusDays(7).toInstant().toEpochMilli();
-        return end > horizon ? 0L : end;
+        return at(rules, start, elapsed + (start - now), boot, zone)
+                .releaseAfter(occurrence.end, start, zone).end;
     }
 
     static long atMinute(LocalDate day, int minute, ZoneId zone) {

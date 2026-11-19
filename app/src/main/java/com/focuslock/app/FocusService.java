@@ -175,12 +175,13 @@ public final class FocusService extends Service {
         }
         completion.trackHard(clock, state);
         long protectionEnd = clock.elapsed + (end - clock.wall);
-        java.util.Set<String> sessions = new java.util.HashSet<>();
+        java.util.Map<String, Long> sessions = new java.util.HashMap<>();
         long regularEnd = 0;
         for (Rule.Window window : state.active) {
             if (window.rule.test) continue;
-            sessions.add(window.key());
-            regularEnd = Math.max(regularEnd, clock.elapsed + (window.end - clock.wall));
+            long sessionEnd = window.elapsedEnd > 0 ? window.elapsedEnd : clock.elapsed + (window.end - clock.wall);
+            sessions.put(window.key(), sessionEnd);
+            regularEnd = Math.max(regularEnd, sessionEnd);
         }
         history.sample(clock.elapsed, paused ? 0 : regularEnd, sessions);
         setEnforcedUntil(protectionEnd);

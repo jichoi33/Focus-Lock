@@ -116,6 +116,15 @@ public final class RuleTest {
                 "a single occurrence releases at its own end");
         equal(adjacent.to, Rule.finalRelease(Arrays.asList(first, adjacent, later, overlapping), occurrence, now, 0L, -1, SEOUL),
                 "overlapping and adjacent locks extend the release through the first gap");
+        Rule.State pending = Rule.at(Arrays.asList(adjacent, later, overlapping), now, SEOUL);
+        Rule.Release quickRelease = pending.releaseAfter(first.to, now, SEOUL);
+        equal(adjacent.to, quickRelease.end, "a quick lock includes an overlapping and back-to-back schedule");
+        if (quickRelease.extension.rule != adjacent) {
+            throw new AssertionError("the last extending schedule is used as the reason");
+        }
+        Rule.Release beforeNext = pending.releaseAfter(overlapping.from - 1, now, SEOUL);
+        equal(overlapping.from - 1, beforeNext.end, "a gap before a scheduled lock keeps the quick end");
+        if (beforeNext.extension != null) throw new AssertionError("a gap has no extending schedule");
         adjacent.enabled = false;
         equal(overlapping.to, Rule.finalRelease(Arrays.asList(first, adjacent, overlapping), occurrence, now, 0L, -1, SEOUL),
                 "disabled locks do not extend the release");
@@ -125,7 +134,7 @@ public final class RuleTest {
         equal(0, Rule.finalRelease(Collections.singletonList(continuous), state(continuous, now).latestActive(), now, 0L, -1, SEOUL),
                 "continuous schedules have no release in the preview horizon");
 
-        System.out.println("41 scheduling assertions passed");
+        System.out.println("45 scheduling assertions passed");
 
     }
 

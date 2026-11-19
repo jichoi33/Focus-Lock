@@ -28,6 +28,22 @@ final class ClockLabels {
         return formatter(is24Hour(context)).format(Instant.ofEpochMilli(millis).atZone(ZoneId.systemDefault()));
     }
 
+    static String unlockTime(long millis, long now, boolean use24Hour) {
+        ZoneId zone = ZoneId.systemDefault();
+        var end = Instant.ofEpochMilli(millis).atZone(zone);
+        var today = Instant.ofEpochMilli(now).atZone(zone).toLocalDate();
+        String time = formatter(use24Hour).format(end);
+        return end.toLocalDate().equals(today) ? time : DATE.format(end) + ", " + time;
+    }
+
+    static String occurrenceDates(long start, long end) {
+        ZoneId zone = ZoneId.systemDefault();
+        var first = Instant.ofEpochMilli(start).atZone(zone);
+        var last = Instant.ofEpochMilli(end).atZone(zone);
+        return first.toLocalDate().equals(last.toLocalDate()) ? DATE.format(first)
+                : DATE.format(first) + " → " + DATE.format(last);
+    }
+
     static String dateTime(long millis, boolean use24Hour) {
         var local = Instant.ofEpochMilli(millis).atZone(ZoneId.systemDefault());
         return DATE.format(local) + ", " + formatter(use24Hour).format(local);

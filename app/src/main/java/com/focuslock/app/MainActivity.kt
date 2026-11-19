@@ -82,6 +82,7 @@ internal data class FocusSnapshot(
     val breaks: EmergencyBreaks
 )
 
+internal val dayPresets = mapOf(31 to "Weekdays", 96 to "Weekends", 127 to "Every day")
 internal val focusDays = listOf("Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun")
 internal fun daysLabel(mask: Int): String =
     focusDays.filterIndexed { index, _ -> mask and (1 shl index) != 0 }.joinToString(", ")
@@ -97,8 +98,9 @@ class MainActivity : ComponentActivity() {
     private lateinit var softStore: SoftStore
     private lateinit var completionStore: SessionCompletion
     private val completionChanged = SharedPreferences.OnSharedPreferenceChangeListener { _, key ->
-        if (key == SessionCompletion.PENDING || key == SessionCompletion.HARD_RESULT || key == SessionCompletion.SOFT_RESULT) {
-            updateCompletion()
+        when (key) {
+            SessionCompletion.PENDING, SessionCompletion.HARD_RESULT, SessionCompletion.SOFT_RESULT,
+            SessionCompletion.HARD_TIME, SessionCompletion.SOFT_TIME -> updateCompletion()
         }
     }
     private val handler = Handler(Looper.getMainLooper())
@@ -117,7 +119,12 @@ class MainActivity : ComponentActivity() {
 
     internal fun dateLabel(time: Long) = ClockLabels.dateTime(time, use24Hour)
     internal fun timeLabel(minute: Int) = ClockLabels.time(minute, use24Hour)
-    internal fun windowLabel(window: Rule.Window) = "${dateLabel(window.start)} → ${dateLabel(window.end)}"
+    internal fun unlockLabel(release: Rule.Release, now: Long): String =
+        if (release.end == 0L) "No scheduled unlock in the next 7 days"
+        else "Unlock at ${ClockLabels.unlockTime(release.end, now, use24Hour)}"
+
+    internal fun releaseAfter(state: Rule.State, end: Long, now: Long): Rule.Release =
+        state.releaseAfter(end, now, ZoneId.systemDefault())
 
     internal var snapshot by mutableStateOf<FocusSnapshot?>(null)
         private set
@@ -126,7 +133,7 @@ class MainActivity : ComponentActivity() {
             update()
         }
     }
-    internal var completionDescription by mutableStateOf("")
+    internal var completionResults by mutableStateOf(emptyList<CompletedFocus>())
         private set
     internal var completedModes by mutableIntStateOf(0)
         private set
@@ -305,7 +312,9 @@ class MainActivity : ComponentActivity() {
 
     private fun updateCompletion() {
         completedModes = completionStore.pending()
-        completionDescription = completionStore.description()
+        completionResults = listOf(SessionCompletion.HARD, SessionCompletion.SOFT)
+            .filter { completedModes and it != 0 }
+            .map { CompletedFocus(completionStore.description(it), completionStore.protectedMillis(it)) }
     }
 
     internal fun dismissCompletion() {
@@ -438,13 +447,16 @@ class MainActivity : ComponentActivity() {
         }
         val notice = if (current.hardLockScreen) "" else
             "\n\nLock screen notifications are off. To see controls, enable Focus Lock notifications and show notifications on the Android lock screen."
+        val now = System.currentTimeMillis()
+        val unlock = if (test) "" else
+            "\n" + unlockLabel(releaseAfter(current.hard, now + minutes * Rule.MINUTE, now), now) + "."
         val details = when {
             test -> "Your phone will lock for one minute. Wake the screen and expand the Hard Lock test notification to check the controls. Tap End test to finish early."
             current.breaks.enabled -> "Your phone will lock for ${durationLabel(minutes)}. Wake the screen and expand the Hard Lock notification to take an emergency break."
             else -> "Your phone will lock for ${durationLabel(minutes)}."
         }
         prompt = Prompt(if (test) "Test Hard Lock?" else "Start Hard Lock?",
-            details + notice, if (test) "Start test" else "Lock") {
+            details + unlock + notice, if (test) "Start test" else "Lock") {
             val clock = SessionClock(this)
             val latest = hardStore.state(clock)
             if (latest.active.isEmpty() && (!test || latest.next - clock.wall > Rule.MINUTE)) {

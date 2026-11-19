@@ -36,38 +36,52 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.util.lerp
 
+internal data class CompletedFocus(val name: String, val millis: Long)
+
 @Composable
-internal fun CompletionScreen(modes: Int, description: String, onDone: () -> Unit) {
+internal fun CompletionScreen(modes: Int, results: List<CompletedFocus>, onDone: () -> Unit) {
     val colors = MaterialTheme.colorScheme
     val modeLabel = when (modes) {
         SessionCompletion.HARD -> "Hard Lock complete"
         SessionCompletion.SOFT -> "Soft Lock complete"
         else -> "Hard Lock and Soft Lock complete"
     }
-    BoxWithConstraints(
+    Box(
         Modifier.fillMaxSize().background(colors.background).safeDrawingPadding(),
         contentAlignment = Alignment.Center
     ) {
-        val screenHeight = maxHeight
-        Column(
-            Modifier.widthIn(max = 420.dp).fillMaxWidth()
-                .verticalScroll(rememberScrollState()).heightIn(min = screenHeight)
-                .padding(horizontal = 28.dp, vertical = 28.dp),
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.Center
-        ) {
-            CompletionMark()
-            Spacer(Modifier.height(12.dp))
-            Text(modeLabel, style = MaterialTheme.typography.labelLarge, color = colors.primary,
-                textAlign = TextAlign.Center)
-            Spacer(Modifier.height(6.dp))
-            Text("Nicely done.", Modifier.semantics { heading() },
-                style = MaterialTheme.typography.headlineLarge, textAlign = TextAlign.Center)
-            if (description.isNotBlank()) {
-                Spacer(Modifier.height(8.dp))
-                Text(description, style = MaterialTheme.typography.bodyMedium, textAlign = TextAlign.Center)
+        Column(Modifier.widthIn(max = 420.dp).fillMaxSize().padding(horizontal = 28.dp, vertical = 20.dp)) {
+            BoxWithConstraints(Modifier.fillMaxWidth().weight(1f)) {
+                val availableHeight = maxHeight
+                Column(
+                    Modifier.fillMaxWidth().verticalScroll(rememberScrollState())
+                        .heightIn(min = availableHeight).padding(vertical = 16.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.Center
+                ) {
+                    CompletionMark()
+                    Spacer(Modifier.height(12.dp))
+                    Text(modeLabel, style = MaterialTheme.typography.labelLarge, color = colors.primary,
+                        textAlign = TextAlign.Center)
+                    Spacer(Modifier.height(6.dp))
+                    Text("Nicely done.", Modifier.semantics { heading() },
+                        style = MaterialTheme.typography.headlineLarge, textAlign = TextAlign.Center)
+                    results.forEach { result ->
+                        if (result.name.isBlank() && result.millis <= 0L) return@forEach
+                        Spacer(Modifier.height(14.dp))
+                        if (result.name.isNotBlank()) {
+                            Text(result.name, style = MaterialTheme.typography.titleMedium, textAlign = TextAlign.Center)
+                        }
+                        if (result.millis > 0L) {
+                            val minutes = (result.millis / Rule.MINUTE).toInt()
+                            val focused = if (minutes == 0) "Less than 1 min focused" else "${durationLabel(minutes)} focused"
+                            Text(focused, style = MaterialTheme.typography.bodyMedium, textAlign = TextAlign.Center,
+                                color = colors.onSurfaceVariant)
+                        }
+                    }
+                }
             }
-            Spacer(Modifier.height(30.dp))
+            Spacer(Modifier.height(12.dp))
             PrimaryButton("Done", onDone)
         }
     }
@@ -143,5 +157,5 @@ private fun celebrationPhase(time: Float, start: Float, end: Float): Float =
 @Preview(showBackground = true, widthDp = 390, heightDp = 740)
 @Composable
 private fun CompletionPreview() {
-    FocusTheme { CompletionScreen(SessionCompletion.HARD, "Evening focus") {} }
+    FocusTheme { CompletionScreen(SessionCompletion.HARD, listOf(CompletedFocus("Evening focus", 45 * Rule.MINUTE))) {} }
 }

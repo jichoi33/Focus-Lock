@@ -17,6 +17,8 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.tooling.preview.Preview
@@ -36,7 +38,7 @@ internal fun FocusWorkspace(activity: MainActivity) {
     val showCompletion = completed != 0 && !hardActive && !state.keyguardLocked
     if (showCompletion && !dialogOpen) {
         BackHandler(onBack = activity::dismissCompletion)
-        CompletionScreen(completed, activity.completionDescription, activity::dismissCompletion)
+        CompletionScreen(completed, activity.completionResults, activity::dismissCompletion)
         return
     }
     val colors = MaterialTheme.colorScheme
@@ -70,7 +72,7 @@ internal fun FocusWorkspace(activity: MainActivity) {
             onDismissRequest = activity::dismissCompletion,
             properties = DialogProperties(usePlatformDefaultWidth = false, decorFitsSystemWindows = false)
         ) {
-            CompletionScreen(completed, activity.completionDescription, activity::dismissCompletion)
+            CompletionScreen(completed, activity.completionResults, activity::dismissCompletion)
         }
     }
 }
@@ -130,6 +132,13 @@ private fun CardHeading(icon: String, title: String, subtitle: String? = null) {
 
 @Composable
 private fun HardWorkspace(activity: MainActivity, state: FocusSnapshot) {
+    val now by produceState(initialValue = System.currentTimeMillis(), state.hard) {
+        value = System.currentTimeMillis()
+        while (true) {
+            delay(Rule.MINUTE - value % Rule.MINUTE)
+            value = System.currentTimeMillis()
+        }
+    }
     val test = state.hard.active.any { it.rule.test }
     val onlyTest = test && state.hard.active.all { it.rule.test }
     val quick = state.hard.active.firstOrNull { it.rule.quick() && !it.rule.test }
@@ -141,16 +150,33 @@ private fun HardWorkspace(activity: MainActivity, state: FocusSnapshot) {
             state.hardEnforced -> "Hard Lock active"
             else -> "Hard Lock pending"
         }
-        RunningCard(title, if (paused) minOf(state.hardEndElapsed, state.breaks.until) else state.hardEndElapsed,
-            if (paused) breakDetail(state.hardEndElapsed, state.breaks.until) else "Phone locked until ${activity.dateLabel(state.hard.activeEnd())}") {
+        val release = remember(state.hard, now) { activity.releaseAfter(state.hard, state.hard.activeEnd(), now) }
+        val countdownEnd = if (onlyTest || release.end == 0L) state.hardEndElapsed
+            else state.hardEndElapsed + (release.end - state.hard.activeEnd())
+        val unlock = activity.unlockLabel(release, now)
+        val detail = if (paused) "${breakDetail(countdownEnd, state.breaks.until)}\n$unlock" else unlock
+        RunningCard(title, if (paused) minOf(countdownEnd, state.breaks.until) else countdownEnd, detail,
+            showCountdown = paused || onlyTest || release.end != 0L) {
             if (onlyTest) TextButton(onClick = { activity.hardAction(FocusService.END_TEST) }) { Text("End test") }
             if (!state.hardEnforced && state.admin && state.secure) TextButton(onClick = activity::refreshHard) { Text("Activate") }
             if (quick != null) TextButton(onClick = { activity.hardAction(FocusService.EXTEND) }) { Text(if (paused) "Add 10 min to lock" else "Add 10 min") }
         }
         if (!onlyTest) BreakRow(activity, state)
     } else {
+        val minutes = activity.quickDuration.total ?: 30
+        val end = now + minutes * Rule.MINUTE
+        val release = remember(state.hard, end) { activity.releaseAfter(state.hard, end, now) }
         SessionCard(activity.quickDuration, { activity.sheet = "duration" },
-            if (state.admin && state.secure) "Start Hard Lock" else "Set up Hard Lock", { activity.startHard() })
+            if (state.admin && state.secure) "Start ${minutes}-min lock" else "Set up Hard Lock", { activity.startHard() }) {
+            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                Text(activity.unlockLabel(release, now), style = MaterialTheme.typography.titleMedium,
+                    color = MaterialTheme.colorScheme.onPrimaryContainer)
+                release.extension?.let {
+                    val name = it.rule.name.orEmpty().ifBlank { "A scheduled lock" }
+                    Caption("$name extends this lock.")
+                }
+            }
+        }
         TextButton(onClick = { activity.startHard(test = true) }, modifier = Modifier.fillMaxWidth()) {
             Text("Test for 1 minute")
         }
@@ -163,18 +189,20 @@ private fun HardWorkspace(activity: MainActivity, state: FocusSnapshot) {
     }
 
     ScheduleHeading(activity::openNewSchedule)
-    val upcoming = state.hard.nextStart
-    if (state.hard.active.isEmpty() && upcoming != null) {
-        Caption("Next lock  ${activity.windowLabel(upcoming)}")
+    val nextByRule = remember(state.hard) {
+        state.hard.upcoming.groupBy { it.rule.id }.mapValues { (_, windows) -> windows.minBy { it.start } }
     }
-    val scheduled = state.rules.filterNot { it.quick() }
+    val activeIds = state.hard.active.map { it.rule.id }.toSet()
+    val scheduled = state.rules.filterNot { it.quick() }.sortedWith(
+        compareBy<Rule> { it.id !in activeIds }.thenBy { nextByRule[it.id]?.start ?: Long.MAX_VALUE }
+    )
     if (scheduled.isEmpty()) {
         Caption("Add a one-time or repeating lock.")
-    } else {
-        scheduled.forEach { rule ->
-            val active = state.hard.active.any { it.rule.id == rule.id }
-            ScheduleCard(activity, rule, active, { activity.schedule = rule }, { activity.toggleSchedule(rule) },
-                { activity.deleteSchedule(rule) })
+    } else GroupCard {
+        scheduled.forEachIndexed { index, rule ->
+            if (index > 0) InsetDivider()
+            ScheduleCard(activity, rule, rule.id in activeIds, nextByRule[rule.id],
+                { activity.schedule = rule }, { activity.toggleSchedule(rule) }, { activity.deleteSchedule(rule) })
         }
     }
 }
@@ -222,30 +250,68 @@ private fun BreakRow(activity: MainActivity, state: FocusSnapshot) {
 }
 
 @Composable
-private fun ScheduleCard(activity: MainActivity, rule: Rule, active: Boolean, onEdit: () -> Unit, onToggle: () -> Unit, onDelete: () -> Unit) {
+private fun ScheduleCard(activity: MainActivity, rule: Rule, active: Boolean, next: Rule.Window?,
+                         onEdit: () -> Unit, onToggle: () -> Unit, onDelete: () -> Unit) {
     val ended = !rule.repeats() && rule.to <= System.currentTimeMillis()
-    GroupCard {
-        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(5.dp)) {
-            Text(rule.name, style = MaterialTheme.typography.titleMedium)
+    val colors = MaterialTheme.colorScheme
+    val edit = if (active) Modifier else Modifier.clickable(onClickLabel = "Edit schedule", onClick = onEdit)
+    Column {
+        Column(Modifier.fillMaxWidth().then(edit).padding(horizontal = 16.dp, vertical = 14.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text(rule.name, Modifier.weight(1f), style = MaterialTheme.typography.titleMedium)
+                if (active) Text("Active", color = colors.primary, style = MaterialTheme.typography.labelMedium)
+                else {
+                    Caption("Edit")
+                    Symbol("Chev", tint = colors.onSurfaceVariant)
+                }
+            }
             if (rule.repeats()) {
-                Text("${activity.timeLabel(rule.startMinute)} – ${activity.timeLabel(rule.repeatEndMinute())}",
-                    style = MaterialTheme.typography.headlineSmall)
-                Caption(daysLabel(rule.days))
-                if (rule.endsNextDay()) Caption("Ends the next day")
+                Text("${activity.timeLabel(rule.startMinute)} → ${activity.timeLabel(rule.repeatEndMinute())}",
+                    style = MaterialTheme.typography.titleLarge)
+                dayPresets[rule.days]?.let { Caption(it) }
+                StartDays(rule.days)
+                if (next == null && rule.endsNextDay()) Caption("Ends the next day")
             } else {
-                Caption(activity.dateLabel(rule.from))
+                Text(activity.dateLabel(rule.from), style = MaterialTheme.typography.titleLarge)
                 Caption(durationLabel(rule.requestedDuration()))
             }
-            if (active) {
-                Text("Active", color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.labelMedium)
-            } else {
-                if (!rule.enabled && !ended) Caption("Turned off")
-                Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                    TextButton(onClick = onEdit) { Text("Edit") }
-                    TextButton(onClick = if (ended) onDelete else onToggle) {
-                        Text(if (ended) "Delete" else if (rule.enabled) "Turn off" else "Turn on")
-                    }
+            if (!active && !rule.enabled && !ended) Caption("Turned off")
+            if (next != null && rule.repeats()) {
+                Column(Modifier.fillMaxWidth().background(colors.surfaceContainer, RoundedCornerShape(10.dp))
+                    .padding(horizontal = 12.dp, vertical = 8.dp)) {
+                    Text("Next occurrence", style = MaterialTheme.typography.labelMedium, color = colors.primary)
+                    Text(ClockLabels.occurrenceDates(next.start, next.end),
+                        style = MaterialTheme.typography.bodyMedium, color = colors.onSurface)
                 }
+            }
+        }
+        if (!active) {
+            TextButton(onClick = if (ended) onDelete else onToggle, modifier = Modifier.padding(start = 8.dp)) {
+                Text(if (ended) "Delete" else if (rule.enabled) "Turn off" else "Turn on")
+            }
+        }
+    }
+}
+
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun StartDays(days: Int) {
+    val colors = MaterialTheme.colorScheme
+    FlowRow(
+        Modifier.fillMaxWidth().clearAndSetSemantics { contentDescription = "Starts on ${daysLabel(days)}" },
+        horizontalArrangement = Arrangement.spacedBy(5.dp),
+        verticalArrangement = Arrangement.spacedBy(4.dp)
+    ) {
+        focusDays.forEachIndexed { index, day ->
+            val selected = days and (1 shl index) != 0
+            Surface(shape = RoundedCornerShape(7.dp),
+                color = if (selected) colors.primaryContainer else colors.surfaceContainer,
+                contentColor = if (selected) colors.onPrimaryContainer else colors.onSurfaceVariant) {
+                Text(day, Modifier.padding(horizontal = 6.dp, vertical = 4.dp),
+                    style = MaterialTheme.typography.labelMedium,
+                    fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal)
             }
         }
     }
@@ -387,21 +453,24 @@ internal fun InsetDivider() = HorizontalDivider(Modifier.padding(horizontal = 16
     color = MaterialTheme.colorScheme.outlineVariant)
 
 @Composable
-private fun RunningCard(title: String, end: Long, detail: String, actions: @Composable () -> Unit) {
-    val time by produceState(initialValue = SystemClock.elapsedRealtime(), end) {
-        value = SystemClock.elapsedRealtime()
-        while (value < end) {
-            delay(1_000)
-            value = SystemClock.elapsedRealtime()
-        }
-    }
-    val seconds = ((end - time + 999) / 1000).coerceAtLeast(0)
+private fun RunningCard(title: String, end: Long, detail: String, showCountdown: Boolean = true,
+                        actions: @Composable () -> Unit) {
     TimerCard {
         CardHeading("Clock", title)
-        Text(String.format(Locale.ROOT, "%02d:%02d:%02d", seconds / 3600, seconds / 60 % 60, seconds % 60),
-            style = TextStyle(fontSize = 44.sp, lineHeight = 54.sp, fontWeight = FontWeight.Medium,
-                letterSpacing = (-1).sp, fontFeatureSettings = "'tnum'"))
-        Caption(detail)
+        if (showCountdown) {
+            val time by produceState(initialValue = SystemClock.elapsedRealtime(), end) {
+                value = SystemClock.elapsedRealtime()
+                while (value < end) {
+                    delay(1_000)
+                    value = SystemClock.elapsedRealtime()
+                }
+            }
+            val seconds = ((end - time + 999) / 1000).coerceAtLeast(0)
+            Text(String.format(Locale.ROOT, "%02d:%02d:%02d", seconds / 3600, seconds / 60 % 60, seconds % 60),
+                style = TextStyle(fontSize = 44.sp, lineHeight = 54.sp, fontWeight = FontWeight.Medium,
+                    letterSpacing = (-1).sp, fontFeatureSettings = "'tnum'"))
+        }
+        Text(detail, style = MaterialTheme.typography.titleMedium)
         Row(verticalAlignment = Alignment.CenterVertically) { actions() }
     }
 }

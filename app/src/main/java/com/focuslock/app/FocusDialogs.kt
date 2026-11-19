@@ -412,6 +412,7 @@ private fun ScheduleDialog(activity: MainActivity, rule: Rule) {
     val close = activity::dismissSchedule
     var name by remember { mutableStateOf(rule.name.orEmpty()) }
     var days by remember { mutableIntStateOf(rule.days) }
+    var customDays by remember { mutableStateOf(rule.days !in dayPresets) }
     var startMinute by remember { mutableIntStateOf(rule.startMinute) }
     var endMinute by remember { mutableIntStateOf(rule.repeatEndMinute()) }
     var firstAt by remember { mutableLongStateOf(rule.from) }
@@ -459,12 +460,29 @@ private fun ScheduleDialog(activity: MainActivity, rule: Rule) {
                     endMinute < startMinute -> Caption("Ends the next day")
                 }
                 Text("Starts on", style = MaterialTheme.typography.titleMedium)
-                FlowRow(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                    focusDays.forEachIndexed { index, day ->
-                        val bit = 1 shl index
-                        FilterChip(days and bit != 0, { days = days xor bit }, label = { Text(day) })
+                FlowRow(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    dayPresets.forEach { (mask, label) ->
+                        FilterChip(!customDays && days == mask, {
+                            customDays = false
+                            days = mask
+                        },
+                            label = { Text(label) })
                     }
+                    FilterChip(customDays, { customDays = true }, label = { Text("Custom") })
                 }
+                if (customDays) {
+                    Surface(shape = RoundedCornerShape(14.dp), color = MaterialTheme.colorScheme.surfaceContainer) {
+                        Column(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp)) {
+                            Text("Choose start days", style = MaterialTheme.typography.labelLarge)
+                            FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                focusDays.forEachIndexed { index, day ->
+                                    val bit = 1 shl index
+                                    FilterChip(days and bit != 0, { days = days xor bit }, label = { Text(day) })
+                                }
+                            }
+                        }
+                    }
+                } else Caption(daysLabel(days))
                 if (days == 0) Caption("Choose at least one start day.")
                 if (days == 127 && startMinute == endMinute) {
                     Text("Runs every day without a planned gap.", color = MaterialTheme.colorScheme.error,

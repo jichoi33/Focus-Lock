@@ -208,7 +208,7 @@ public final class SoftBlocker extends AccessibilityService {
         boolean paused = !session.test && breakUntil > now;
         boolean realSession = softActive && !session.test;
         history.sample(now, realSession && !paused ? session.timer.elapsedEnd : 0,
-                realSession ? java.util.Collections.singleton(sessionKey) : java.util.Collections.emptySet());
+                realSession ? java.util.Collections.singletonMap(sessionKey, session.timer.elapsedEnd) : java.util.Collections.emptyMap());
         if (!softActive && !hardActive) {
             hideCover();
             return;
