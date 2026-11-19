@@ -22,12 +22,16 @@ Requires **Android 8.0 or later**. The app is in English and follows your device
 
 To update, open the latest signed APK over your existing release. Android uses the app ID and signing certificate to decide whether it can install the update in place. Enable lock screen notifications if you want to see the Hard Lock countdown and emergency controls.
 
+## How repeating Hard Locks work
+
+Select the days the lock **starts**. For example, choosing Monday through Friday, **22:00 → 07:00**, includes Friday night through Saturday morning. Setting the start and end to the same time creates a full-day window. If two Hard Locks overlap, the phone stays locked until the last active window ends.
+
 ## During a session
 
 - **Schedules** show the next start and end dates, including overnight locks. When a repeating schedule could start immediately, you can start it now or wait for the next occurrence. Daily schedules that run continuously ask for confirmation. Focus Lock schedules a reminder five minutes before a scheduled lock. Android power-saving settings can delay it.
 - **Emergency breaks** let you pause either lock temporarily while its countdown continues. Configure the duration and number of breaks in Focus Lock settings before starting. For Hard Lock, expand the lock screen notification. For Soft Lock, open the app from its countdown notification.
 - **Soft Lock rules** can be tightened mid-session, and you can add time if you need it. Website rules include subdomains and depend on the address bar being readable in a supported browser. If the accessibility service disconnects, the app shows **Blocking paused** while the countdown continues.
-- **Completion and statistics** show what you finished and how much time the app actually protected. Normal sessions end with a short celebration. Each mode has a seven-day view and all-time totals. One-minute tests are excluded from statistics.
+- **Completion and statistics** show what you finished and how much time the app actually protected. After a normal session ends, open Focus Lock to see the celebration. If completion notifications are enabled, you can also tap the notification to open it. Each mode has a seven-day view and all-time totals. One-minute tests are excluded from statistics.
 
 <details>
 <summary>How Android permissions affect a lock</summary>
@@ -65,3 +69,7 @@ Run `apksigner verify --print-certs Focus-Lock.apk`, substituting the downloaded
 ```
 
 </details>
+
+## License
+
+Focus Lock is distributed under the [MIT License](LICENSE).
