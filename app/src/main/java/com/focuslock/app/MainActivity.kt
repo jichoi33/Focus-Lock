@@ -83,13 +83,9 @@ internal data class FocusSnapshot(
 )
 
 internal val focusDays = listOf("Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun")
-internal fun daysLabel(mask: Int): String = when (mask) {
-    0 -> "Choose days"
-    31 -> "Weekdays"
-    96 -> "Weekends"
-    127 -> "Every day"
-    else -> focusDays.filterIndexed { index, _ -> mask and (1 shl index) != 0 }.joinToString(", ")
-}
+internal fun daysLabel(mask: Int): String =
+    focusDays.filterIndexed { index, _ -> mask and (1 shl index) != 0 }.joinToString(", ")
+
 internal fun durationLabel(total: Int): String = when {
     total < 60 -> "${total} min"
     total % 60 == 0 -> "${total / 60} hr"

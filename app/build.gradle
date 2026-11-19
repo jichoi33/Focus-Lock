@@ -12,8 +12,8 @@ android {
         applicationId 'com.focuslock.app.preview18'
         minSdk 26
         targetSdk 35
-        versionCode 22
-        versionName '1.9.8'
+        versionCode 23
+        versionName '1.9.9'
         resourceConfigurations += ['en']
     }
     compileOptions {

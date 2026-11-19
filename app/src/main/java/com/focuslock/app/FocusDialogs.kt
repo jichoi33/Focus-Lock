@@ -460,11 +460,6 @@ private fun ScheduleDialog(activity: MainActivity, rule: Rule) {
                 }
                 Text("Starts on", style = MaterialTheme.typography.titleMedium)
                 FlowRow(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                    listOf(31, 96, 127).forEach { preset ->
-                        FilterChip(days == preset, { days = preset }, label = { Text(daysLabel(preset)) })
-                    }
-                }
-                FlowRow(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                     focusDays.forEachIndexed { index, day ->
                         val bit = 1 shl index
                         FilterChip(days and bit != 0, { days = days xor bit }, label = { Text(day) })
