@@ -12,7 +12,7 @@ Each mode posts its own live countdown. Focus Lock checks the app's notification
 
 ## Install
 
-Download `Focus-Lock-1.9.4.apk` from the [v1.9.4 release](../../releases/tag/v1.9.4) and open it on your Android device. Focus Lock requires Android 8.0 (API 26) or later. If prompted, allow the app opening the APK to install unknown apps.
+Download the signed APK from the [latest release](../../releases/latest) and open it on your Android device. Focus Lock requires Android 8.0 (API 26) or later. If prompted, allow the app opening the APK to install unknown apps.
 
 ## Session completion
 
