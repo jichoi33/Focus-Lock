@@ -1,79 +1,67 @@
 # Focus Lock
 
-Focus Lock is an Android focus timer with a Kotlin, Jetpack Compose, and Material 3 interface. The app uses English and follows the system light or dark appearance. The Android services that enforce locks are implemented in Java.
+Focus Lock helps you put your Android phone away for a set time or keep distractions out while you work. Start a session when you need it, or schedule a recurring time to disconnect.
 
-Changing the system appearance updates the open screen and any Soft Lock cover in place, including while you edit a schedule or a website list.
+[**Download the latest APK**](https://github.com/jichoi33/Focus-Lock/releases/latest) · [Report a bug](https://github.com/jichoi33/Focus-Lock/issues)
 
-New immediate Hard Lock and Soft Lock sessions default to 30 minutes.
+Requires **Android 8.0 or later**. The app is in English and follows your device's light or dark theme.
 
-Android Settings is blocked while either lock is active. Hard Lock keeps the Android keyguard in place and also covers the Settings app during unlock transitions when the Focus Lock accessibility service is enabled. Soft Lock covers the Settings app in both Blocklist and Allowlist.
+## Choose a lock
 
-Each mode posts its own live countdown. Focus Lock checks the app's notification permission and the selected mode's notification channel before showing the start confirmation. Enable lock screen notification display in Android to see the Hard Lock timer and Emergency break on the lock screen. Android controls which actions are accessible there. Use the Hard Lock notifications screen in Focus Lock settings to preview its pop-up. In Do Not Disturb, allow Focus Lock and notification pop-ups for eligible apps in the active Android mode.
+| Mode | What it does | What Android needs |
+| --- | --- | --- |
+| **Hard Lock** | Returns the phone to the Android lock screen if you unlock it during a session. Start a timer or set a one-time or repeating schedule. | A PIN, pattern, or password and device admin access. Scheduled locks need permission for alarms and reminders. |
+| **Soft Lock** | Block selected apps and websites with **Blocklist**, or keep access to just the apps you choose and essential system features with **Allowlist**. | The **Focus Lock Soft Lock** accessibility service. |
 
-## Install
+## Install and get started
 
-Download the signed APK from the [latest release](../../releases/latest) and open it on your Android device. Focus Lock requires Android 8.0 (API 26) or later. If prompted, allow the app opening the APK to install unknown apps.
+1. Open the [latest release](https://github.com/jichoi33/Focus-Lock/releases/latest), expand **Assets**, and download `Focus-Lock-<version>.apk`.
+2. Open the APK on your Android device. If prompted, allow the browser or file manager opening it to **Install unknown apps**.
+3. Open Focus Lock, choose a mode, and follow the permission prompts. If Android blocks the Soft Lock service for a sideloaded app, open Focus Lock's Android **App info** screen and choose **Allow restricted settings** from the menu.
+4. Run **Test for 1 minute** before starting a longer lock. For Hard Lock, wake the screen and expand the lock screen notification to find **End test**. For Soft Lock, **End test** is available in the app or on the block screen.
 
-## Session completion
+To update, open the latest signed APK over your existing release. Android uses the app ID and signing certificate to decide whether it can install the update in place. Enable lock screen notifications if you want to see the Hard Lock countdown and emergency controls.
 
-Completed Hard and Soft Locks show a celebration in Focus Lock and identify the finished session. If the app is in the background, tap the completion notification or open the app after unlocking. One-minute tests do not show a celebration.
+## During a session
 
-## Scheduled Hard Lock
+- **Schedules** show the next start and end dates, including overnight locks. When a repeating schedule could start immediately, you can start it now or wait for the next occurrence. Daily schedules that run continuously ask for confirmation. Focus Lock schedules a reminder five minutes before a scheduled lock. Android power-saving settings can delay it.
+- **Emergency breaks** let you pause either lock temporarily while its countdown continues. Configure the duration and number of breaks in Focus Lock settings before starting. For Hard Lock, expand the lock screen notification. For Soft Lock, open the app from its countdown notification.
+- **Soft Lock rules** can be tightened mid-session, and you can add time if you need it. Website rules include subdomains and depend on the address bar being readable in a supported browser. If the accessibility service disconnects, the app shows **Blocking paused** while the countdown continues.
+- **Completion and statistics** show what you finished and how much time the app actually protected. Normal sessions end with a short celebration. Each mode has a seven-day view and all-time totals. One-minute tests are excluded from statistics.
 
-Repeating locks preview the next occurrence with its actual start and end dates. If a schedule could begin immediately, confirm the start or choose its next occurrence. Daily schedules with matching start and end times run continuously and ask for confirmation.
+<details>
+<summary>How Android permissions affect a lock</summary>
 
-Focus Lock schedules a reminder five minutes before a scheduled Hard Lock. Tapping it opens the schedule. You can manage reminders from Focus Lock settings. Android can delay notifications in Doze.
+Hard Lock reapplies the system lock screen during calls. Android handles incoming and emergency calls on that screen. An active lock can also restrict access to Android Settings.
 
-## Emergency breaks
+Soft Lock reads the visible address bar in supported browsers to apply website rules. Strict mode can cover a browser if its address stays unreadable. Samsung Internet requires a verified address. Allowlist rules apply to the app itself, including any web views inside it.
 
-Both modes support temporary breaks. Open Settings → Emergency breaks before starting a lock. Defaults are two minutes each and three uses per session. Choose 1–60 minutes and 1–20 uses, or turn breaks off. Limits stay fixed throughout the session. The original countdown continues. Blocking resumes automatically when a break expires if time remains. Android Settings stays covered when accessibility is connected. Overlapping locks share the break and quota. Extending a lock does not replenish the quota. Both one-minute tests can end without using a break.
+If Android stops a scheduled Hard Lock from starting in the background, tap the failure notification to activate it while the scheduled window is open. The app attempts to resume active locks after reboot. Force-stopping the app, revoking permissions, changing the device clock, or manufacturer background restrictions can affect enforcement.
 
-On Hard Lock, expand the lock screen notification and tap Emergency break, then unlock Android normally. On Soft Lock, open the app through its countdown notification and tap Emergency break.
+</details>
 
-## Hard Lock
+## Privacy
 
-- Set an Android PIN, pattern, or password and enable device admin for Focus Lock. During an active lock, Focus Lock reapplies the Android lock screen after you unlock the device.
-- Focus Lock checks as soon as Android reports an unlock and briefly retries during the unlock animation. A fallback check runs while the screen is on.
-- Start a session by entering its duration, or add a one-time or repeating schedule. For a repeating lock, choose start and end times and the days it should start. An end time at or before the start time is on the following day. Android may ask you to allow alarms and reminders before scheduling your first lock.
-- **Test for 1 minute** locks the phone and ends automatically. Wake the screen and expand its notification to see **End test**. Settings → Lock screen notifications provides links to check both notification settings.
-- The app and countdown notification use the latest end time among active Hard Locks. If Android prevents a scheduled lock from starting in the background, tap the failure notification to activate it while the scheduled window is still open.
-- Existing schedules created with a location condition are disabled on upgrade. Enable one explicitly to make it apply at any location.
-- Hard Lock continues to reapply the Android lock screen during calls. Android handles incoming and emergency calls on its lock screen. If you enable Emergency break in Focus Lock, the lock notification also provides a temporary break when notifications are available.
+Focus Lock stores your settings, selected apps and websites, and focus statistics on your device. It reads visible browser addresses to enforce your rules and does not store or transmit the addresses you visit. The app does not request internet access.
 
-## Soft Lock
+## Build from source
 
-- **Blocklist** blocks the apps and websites you select. Website rules include subdomains and use the visible address bar of supported browsers. A blocked host must remain visible briefly before Focus Lock covers the page. Strict mode covers a browser after its address stays unreadable for about two seconds. In Samsung Internet, a website block requires a verified address even in strict mode. Typing in the address bar and short navigation transitions stay clear.
-- **Allowlist** permits the apps you select. Essential system surfaces, the default dialer, and Focus Lock remain available. Web views inside allowed apps follow the app rule.
-- **Return to Home for blocked apps** is on by default for new sessions in both modes. Focus Lock shows the block screen briefly and takes you back to Home. Turning this option off keeps the block screen open. Website blocks provide a **Previous page** button.
-- Enable **Focus Lock Soft Lock** in Android accessibility settings. If your device restricts accessibility for a sideloaded app, check **Allow restricted settings** in the app-info menu.
-- If the accessibility service disconnects during a session, **Blocking paused** shows that enforcement has stopped while the timer continues. Reconnecting applies the current rules for the remaining time.
-- **Test for 1 minute** applies the selected rules without saving changes to the last normal session. Use **End test** in the app or on the block screen to exit early.
-- Select **Add time** during a Soft Lock to extend it. You can add between one minute and 24 hours at a time.
-- Select **Tighten rules** to add blocked apps or websites in Blocklist mode, or remove allowed apps in Allowlist mode. Changes apply to the current session and become the selections for future sessions.
+Use **JDK 17 or 21** and **Android SDK 35**. Open the project in Android Studio or run the Gradle wrapper from the repository root.
 
-## Statistics
-
-Open each mode’s statistics to see protected time by day, sessions started, emergency breaks, and days with focus over today and the preceding six days. Time accumulates while the respective enforcement service is active and pauses during emergency breaks. One-minute tests are excluded. Select **All time** to see totals from every recorded date. The app stores daily totals on the device, including records from 1.8.0 when updating in place.
-
-## Reboot and data
-
-Immediate sessions use elapsed time during the current boot, including device sleep. Calendar schedules use the device clock and time zone. After reboot, Focus Lock estimates the remaining time from the saved wall-clock deadline, bounded by the saved duration, and resumes when Android sends the boot-completed event or reconnects the accessibility service. Wall-clock changes while the device is off can affect this estimate. Force-stopping the app, revoking permissions, and manufacturer background restrictions can affect enforcement. Focus Lock keeps settings and selected targets on the device. It does not store or transmit visited addresses.
-
-## Build and update
-
-Use JDK 17 or 21 and Android SDK 35. Run `./gradlew :app:assembleRelease` on Linux or macOS or `gradlew.bat :app:assembleRelease` on Windows. The unsigned APK is at `app/build/outputs/apk/release/app-release-unsigned.apk`. The display name is **Focus Lock**. The application ID stays `com.focuslock.app.preview18`, which is the ID of the distributed 1.8.0 APK.
-
-Bump `versionCode` and `versionName` in `app/build.gradle` for each release. For in-place updates from the signed 1.9.1 release, keep the application ID and use the **Focus-Lock-release.p12** keystore with alias `focus-lock`. Use Android Studio's **Build → Generate Signed App Bundle or APK** or run:
-
-```text
-apksigner sign --ks Focus-Lock-release.p12 --ks-key-alias focus-lock --out Focus-Lock-signed.apk app/build/outputs/apk/release/app-release-unsigned.apk
-apksigner verify --print-certs Focus-Lock-signed.apk
+```bash
+./gradlew :app:assembleDebug
+./gradlew :app:assembleRelease
 ```
 
-Compare the resulting certificate SHA-256 fingerprint with the 1.9.1 release before distributing an update.
+On Windows, use `gradlew.bat`. APKs are generated under `app/build/outputs/apk/`. The release build produces an unsigned APK. The application ID is `com.focuslock.app.preview18`.
+
+<details>
+<summary>Verify the official release signing certificate</summary>
+
+Run `apksigner verify --print-certs Focus-Lock.apk`, substituting the downloaded filename. Official releases from the current signing lineage use this SHA-256 certificate fingerprint.
 
 ```text
 8827cf9ab561a7534f8ecc056cc61920e37cc94bd8386a21e36bd4ec6ce6a8e9
 ```
 
-Store the keystore and password separately and keep private backups. The 1.9.1 release starts a new signing lineage. An earlier installation with a different signing certificate needs a fresh install.
+</details>
