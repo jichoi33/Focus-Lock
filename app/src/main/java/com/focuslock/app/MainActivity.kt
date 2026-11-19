@@ -596,9 +596,6 @@ class MainActivity : ComponentActivity() {
         applySchedule(draft, review = true)
     }
 
-    internal fun previewSchedule(draft: Rule): Pair<SchedulePreview?, SchedulePreview?> =
-        previewSchedule(draft.copy().apply { enabled = true }, SessionClock(this))
-
     private fun previewSchedule(draft: Rule, clock: SessionClock): Pair<SchedulePreview?, SchedulePreview?> {
         val zone = ZoneId.systemDefault()
         val state = Rule.at(listOf(draft), clock.wall, clock.elapsed, clock.boot, zone)

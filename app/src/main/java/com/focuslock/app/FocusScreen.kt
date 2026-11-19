@@ -201,7 +201,7 @@ private fun HardWorkspace(activity: MainActivity, state: FocusSnapshot) {
     } else GroupCard {
         scheduled.forEachIndexed { index, rule ->
             if (index > 0) InsetDivider()
-            ScheduleCard(activity, rule, rule.id in activeIds, nextByRule[rule.id],
+            ScheduleCard(activity, rule, rule.id in activeIds,
                 { activity.schedule = rule }, { activity.toggleSchedule(rule) }, { activity.deleteSchedule(rule) })
         }
     }
@@ -250,7 +250,7 @@ private fun BreakRow(activity: MainActivity, state: FocusSnapshot) {
 }
 
 @Composable
-private fun ScheduleCard(activity: MainActivity, rule: Rule, active: Boolean, next: Rule.Window?,
+private fun ScheduleCard(activity: MainActivity, rule: Rule, active: Boolean,
                          onEdit: () -> Unit, onToggle: () -> Unit, onDelete: () -> Unit) {
     val ended = !rule.repeats() && rule.to <= System.currentTimeMillis()
     val colors = MaterialTheme.colorScheme
@@ -272,20 +272,12 @@ private fun ScheduleCard(activity: MainActivity, rule: Rule, active: Boolean, ne
                     style = MaterialTheme.typography.titleLarge)
                 dayPresets[rule.days]?.let { Caption(it) }
                 StartDays(rule.days)
-                if (next == null && rule.endsNextDay()) Caption("Ends the next day")
+                if (rule.endsNextDay()) Caption("Ends the next day")
             } else {
                 Text(activity.dateLabel(rule.from), style = MaterialTheme.typography.titleLarge)
                 Caption(durationLabel(rule.requestedDuration()))
             }
             if (!active && !rule.enabled && !ended) Caption("Turned off")
-            if (next != null && rule.repeats()) {
-                Column(Modifier.fillMaxWidth().background(colors.surfaceContainer, RoundedCornerShape(10.dp))
-                    .padding(horizontal = 12.dp, vertical = 8.dp)) {
-                    Text("Next occurrence", style = MaterialTheme.typography.labelMedium, color = colors.primary)
-                    Text(ClockLabels.occurrenceDates(next.start, next.end),
-                        style = MaterialTheme.typography.bodyMedium, color = colors.onSurface)
-                }
-            }
         }
         if (!active) {
             TextButton(onClick = if (ended) onDelete else onToggle, modifier = Modifier.padding(start = 8.dp)) {

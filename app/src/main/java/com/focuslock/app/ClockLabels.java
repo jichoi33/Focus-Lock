@@ -36,14 +36,6 @@ final class ClockLabels {
         return end.toLocalDate().equals(today) ? time : DATE.format(end) + ", " + time;
     }
 
-    static String occurrenceDates(long start, long end) {
-        ZoneId zone = ZoneId.systemDefault();
-        var first = Instant.ofEpochMilli(start).atZone(zone);
-        var last = Instant.ofEpochMilli(end).atZone(zone);
-        return first.toLocalDate().equals(last.toLocalDate()) ? DATE.format(first)
-                : DATE.format(first) + " → " + DATE.format(last);
-    }
-
     static String dateTime(long millis, boolean use24Hour) {
         var local = Instant.ofEpochMilli(millis).atZone(ZoneId.systemDefault());
         return DATE.format(local) + ", " + formatter(use24Hour).format(local);
