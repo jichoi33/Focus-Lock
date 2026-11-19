@@ -70,7 +70,9 @@ public final class AlarmReceiver extends BroadcastReceiver {
             store.rebaseQuick();
             new SoftStore(context).rebase();
         }
-        Rule.State state = store.state(new SessionClock(context));
+        SessionClock clock = new SessionClock(context);
+        Rule.State state = store.state(clock);
+        new SessionCompletion(context).reconcileHard(clock, state);
         schedule(context, state);
         boolean admin = FocusAdmin.enabled(context);
         if (state.active.isEmpty() || !admin) {

@@ -103,7 +103,7 @@ internal fun WorkspaceDialogs(activity: MainActivity, state: FocusSnapshot) {
             GroupCard {
                 ActionRow("One-time lock") { activity.startScheduleDraft(false) }
                 InsetDivider()
-                ActionRow("Repeat by weekday") { activity.startScheduleDraft(true) }
+                ActionRow("Repeating lock", "Choose days and a time range") { activity.startScheduleDraft(true) }
             }
         }
         "extend" -> {
@@ -369,33 +369,49 @@ private fun ScheduleDialog(activity: MainActivity, rule: Rule) {
     var name by remember { mutableStateOf(rule.name.orEmpty()) }
     var days by remember { mutableIntStateOf(rule.days) }
     var startMinute by remember { mutableIntStateOf(rule.startMinute) }
+    var endMinute by remember { mutableIntStateOf(rule.repeatEndMinute()) }
     var firstAt by remember { mutableLongStateOf(rule.from) }
-    var duration by remember { mutableStateOf(DurationInput.of(rule.requestedDuration().coerceIn(1, 1440))) }
+    var duration by remember { mutableStateOf(DurationInput.of(rule.requestedDuration().coerceIn(1, Rule.DAY))) }
     var dateDialog by remember { mutableStateOf(false) }
-    var timeDialog by remember { mutableStateOf(false) }
+    var timeField by remember { mutableStateOf<String?>(null) }
     var date by remember { mutableStateOf(Instant.ofEpochMilli(firstAt).atZone(ZoneId.systemDefault()).toLocalDate()) }
 
     FocusDialog(if (repeating) "Repeating lock" else "One-time lock", close, {
-        activity.saveSchedule(rule, name, days, startMinute, firstAt, duration)
+        if (repeating) activity.saveRepeatingSchedule(rule, name, days, startMinute, endMinute)
+        else activity.saveOneTimeSchedule(rule, name, firstAt, duration)
     }, "Save") {
         Column(Modifier.fillMaxWidth().heightIn(max = dialogBodyHeight()).verticalScroll(rememberScrollState()),
             verticalArrangement = Arrangement.spacedBy(12.dp)) {
             OutlinedTextField(name, { name = it }, label = { Text("Schedule name") }, singleLine = true, modifier = Modifier.fillMaxWidth())
             if (repeating) {
-                Text(daysLabel(days), style = MaterialTheme.typography.labelMedium)
+                Text("Lock window", style = MaterialTheme.typography.titleMedium)
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    ScheduleTimeField("Starts at", startMinute, Modifier.weight(1f)) { timeField = "Start time" }
+                    ScheduleTimeField("Ends at", endMinute, Modifier.weight(1f)) { timeField = "End time" }
+                }
+                when {
+                    endMinute == startMinute -> Caption("Ends at the same time the next day.")
+                    endMinute < startMinute -> Caption("Ends the next day")
+                }
+                Text("Starts on", style = MaterialTheme.typography.titleMedium)
+                FlowRow(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    listOf(31, 96, 127).forEach { preset ->
+                        FilterChip(days == preset, { days = preset }, label = { Text(daysLabel(preset)) })
+                    }
+                }
                 FlowRow(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                     focusDays.forEachIndexed { index, day ->
                         val bit = 1 shl index
                         FilterChip(days and bit != 0, { days = days xor bit }, label = { Text(day) })
                     }
                 }
-            }
-            GroupCard {
-                ActionRow("Start", value = if (repeating) timeLabel(startMinute) else dateLabel(firstAt)) {
-                    if (repeating) timeDialog = true else dateDialog = true
+                if (days == 0) Caption("Choose at least one start day.")
+            } else {
+                GroupCard {
+                    ActionRow("Start", value = dateLabel(firstAt)) { dateDialog = true }
                 }
+                DurationFields(duration) { duration = it }
             }
-            DurationFields(duration) { duration = it }
             if (rule.name != null) {
                 TextButton(onClick = { activity.deleteSchedule(rule) }) {
                     Text("Delete schedule", color = MaterialTheme.colorScheme.error)
@@ -408,15 +424,35 @@ private fun ScheduleDialog(activity: MainActivity, rule: Rule) {
         DateDialog(date, { dateDialog = false }) { selected ->
             date = selected
             dateDialog = false
-            timeDialog = true
+            timeField = "Start time"
         }
     }
-    if (timeDialog) {
+    timeField?.let { title ->
         val localTime = Instant.ofEpochMilli(firstAt).atZone(ZoneId.systemDefault())
-        val initial = if (repeating) startMinute else localTime.hour * 60 + localTime.minute
-        StartTimeDialog(initial, { timeDialog = false }) { selected ->
-            if (repeating) startMinute = selected else firstAt = Rule.atMinute(date, selected, ZoneId.systemDefault())
-            timeDialog = false
+        val initial = when {
+            !repeating -> localTime.hour * 60 + localTime.minute
+            title == "End time" -> endMinute
+            else -> startMinute
+        }
+        ScheduleTimeDialog(title, initial, { timeField = null }) { selected ->
+            when {
+                !repeating -> firstAt = Rule.atMinute(date, selected, ZoneId.systemDefault())
+                title == "End time" -> endMinute = selected
+                else -> startMinute = selected
+            }
+            timeField = null
+        }
+    }
+}
+
+@Composable
+private fun ScheduleTimeField(label: String, minute: Int, modifier: Modifier, onClick: () -> Unit) {
+    val colors = MaterialTheme.colorScheme
+    Surface(onClick = onClick, modifier = modifier, shape = RoundedCornerShape(16.dp),
+        color = colors.primaryContainer, contentColor = colors.onPrimaryContainer) {
+        Column(Modifier.padding(horizontal = 14.dp, vertical = 10.dp)) {
+            Text(label, style = MaterialTheme.typography.labelMedium)
+            Text(timeLabel(minute), style = MaterialTheme.typography.titleLarge)
         }
     }
 }
@@ -437,9 +473,9 @@ private fun DateDialog(date: LocalDate, dismiss: () -> Unit, onDate: (LocalDate)
 }
 
 @Composable
-private fun StartTimeDialog(initial: Int, dismiss: () -> Unit, onTime: (Int) -> Unit) {
+private fun ScheduleTimeDialog(title: String, initial: Int, dismiss: () -> Unit, onTime: (Int) -> Unit) {
     val picker = rememberTimePickerState(initialHour = initial / 60, initialMinute = initial % 60, is24Hour = true)
-    FocusDialog("Start time", dismiss, { onTime(picker.hour * 60 + picker.minute) }) {
+    FocusDialog(title, dismiss, { onTime(picker.hour * 60 + picker.minute) }) {
         Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) { TimeInput(picker) }
     }
 }

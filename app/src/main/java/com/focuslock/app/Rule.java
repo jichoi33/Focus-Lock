@@ -39,6 +39,14 @@ final class Rule {
         return endMinute > startMinute ? endMinute - startMinute : DAY + endMinute - startMinute;
     }
 
+    int repeatEndMinute() {
+        return durationMinutes > 0 ? (startMinute + durationMinutes) % DAY : endMinute;
+    }
+
+    boolean endsNextDay() {
+        return repeatEndMinute() <= startMinute;
+    }
+
     static class Window {
         final Rule rule;
         final long start;
@@ -118,7 +126,7 @@ final class Rule {
                 if (rule.durationMinutes > 0) {
                     end = start + rule.durationMinutes * MINUTE;
                 } else {
-                    LocalDate endDay = rule.endMinute <= rule.startMinute ? day.plusDays(1) : day;
+                    LocalDate endDay = rule.endsNextDay() ? day.plusDays(1) : day;
                     end = atMinute(endDay, rule.endMinute, zone);
                 }
                 state.consider(new Window(rule, start, end), now);

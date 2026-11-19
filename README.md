@@ -1,4 +1,4 @@
-# Focus Lock 1.9.4
+# Focus Lock
 
 Focus Lock is an Android focus timer with a Kotlin, Jetpack Compose, and Material 3 interface. The app uses English and follows the system light or dark appearance. The Android services that enforce locks are implemented in Java.
 
@@ -14,6 +14,10 @@ Each mode posts its own live countdown. Focus Lock checks the app's notification
 
 Download `Focus-Lock-1.9.4.apk` from the [v1.9.4 release](../../releases/tag/v1.9.4) and open it on your Android device. Focus Lock requires Android 8.0 (API 26) or later. If prompted, allow the app opening the APK to install unknown apps.
 
+## Session completion
+
+Completed Hard and Soft Locks show a celebration in Focus Lock. If the app is in the background, tap the completion notification or open the app after unlocking. One-minute tests do not show a celebration.
+
 ## Emergency breaks
 
 Both modes support temporary breaks. Open Settings → Emergency breaks before starting a lock. Defaults are two minutes each and three uses per session. Choose 1–60 minutes and 1–20 uses, or turn breaks off. Limits stay fixed throughout the session. The original countdown continues. Blocking resumes automatically when a break expires if time remains. Android Settings stays covered when accessibility is connected. Overlapping locks share the break and quota. Extending a lock does not replenish the quota. Both one-minute tests can end without using a break.
@@ -24,7 +28,7 @@ On Hard Lock, expand the lock screen notification and tap Emergency break, then 
 
 - Set an Android PIN, pattern, or password and enable device admin for Focus Lock. During an active lock, Focus Lock reapplies the Android lock screen after you unlock the device.
 - Focus Lock checks as soon as Android reports an unlock and briefly retries during the unlock animation. A fallback check runs while the screen is on.
-- Start a session by entering its duration, or add a one-time or repeating schedule. Android may ask you to allow alarms and reminders before scheduling your first lock.
+- Start a session by entering its duration, or add a one-time or repeating schedule. For a repeating lock, choose start and end times and the days it should start. An end time at or before the start time is on the following day. Android may ask you to allow alarms and reminders before scheduling your first lock.
 - **Test for 1 minute** locks the phone and ends automatically. Wake the screen and expand its notification to see **End test**. Settings → Lock screen notifications provides links to check both notification settings.
 - The app and countdown notification use the latest end time among active Hard Locks. If Android prevents a scheduled lock from starting in the background, tap the failure notification to activate it while the scheduled window is still open.
 - Existing schedules created with a location condition are disabled on upgrade. Enable one explicitly to make it apply at any location.

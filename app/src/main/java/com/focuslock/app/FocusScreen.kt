@@ -2,6 +2,7 @@ package com.focuslock.app
 
 import android.os.SystemClock
 
+import androidx.activity.compose.BackHandler
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -27,6 +28,14 @@ import kotlinx.coroutines.delay
 @Composable
 internal fun FocusWorkspace(activity: MainActivity) {
     val state = activity.snapshot ?: return
+    val completed = activity.completedModes
+    val idle = state.hard.active.isEmpty() && !state.soft.active(SystemClock.elapsedRealtime())
+    val dialogOpen = activity.sheet != null || activity.schedule != null || activity.prompt != null
+    if (completed != 0 && idle && !dialogOpen) {
+        BackHandler(onBack = activity::dismissCompletion)
+        CompletionScreen(completed, activity::dismissCompletion)
+        return
+    }
     val colors = MaterialTheme.colorScheme
     Box(Modifier.fillMaxSize().background(colors.background).safeDrawingPadding().imePadding(),
         contentAlignment = Alignment.TopCenter) {
@@ -206,12 +215,24 @@ private fun ScheduleCard(rule: Rule, active: Boolean, onEdit: () -> Unit, onTogg
     GroupCard {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(5.dp)) {
             Text(rule.name, style = MaterialTheme.typography.titleMedium)
-            val start = if (rule.repeats()) "${daysLabel(rule.days)} · ${timeLabel(rule.startMinute)}" else dateLabel(rule.from)
-            Caption("${start} · ${durationLabel(rule.requestedDuration())}")
-            if (active) Text("Active", color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.labelMedium)
-            else Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                TextButton(onClick = onEdit) { Text("Edit") }
-                TextButton(onClick = if (ended) onDelete else onToggle) { Text(if (ended) "Delete" else if (rule.enabled) "Turn off" else "Turn on") }
+            if (rule.repeats()) {
+                Text("${timeLabel(rule.startMinute)} – ${timeLabel(rule.repeatEndMinute())}",
+                    style = MaterialTheme.typography.headlineSmall)
+                val endDay = if (rule.endsNextDay()) " · Ends next day" else ""
+                Caption(daysLabel(rule.days) + endDay)
+            } else {
+                Caption("${dateLabel(rule.from)} · ${durationLabel(rule.requestedDuration())}")
+            }
+            if (active) {
+                Text("Active", color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.labelMedium)
+            } else {
+                if (!rule.enabled && !ended) Caption("Turned off")
+                Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                    TextButton(onClick = onEdit) { Text("Edit") }
+                    TextButton(onClick = if (ended) onDelete else onToggle) {
+                        Text(if (ended) "Delete" else if (rule.enabled) "Turn off" else "Turn on")
+                    }
+                }
             }
         }
     }

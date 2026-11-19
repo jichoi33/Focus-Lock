@@ -57,10 +57,26 @@ public final class RuleTest {
         durationRule.durationMinutes = 120;
         long beforeGap = Rule.atMinute(LocalDate.of(2026, 3, 8), 60, newYork);
         Rule.State acrossGap = Rule.at(Collections.singletonList(durationRule), beforeGap, newYork);
-        equal(beforeGap + 120 * Rule.MINUTE, acrossGap.next, "new rules use elapsed duration across DST");
+        equal(beforeGap + 120 * Rule.MINUTE, acrossGap.next, "saved duration rules keep elapsed time across DST");
+        equal(180, durationRule.repeatEndMinute(), "saved duration rules have a displayable end time");
+
+        Rule timeRange = new Rule();
+        timeRange.days = 64;
+        timeRange.startMinute = 60;
+        timeRange.endMinute = 180;
+        Rule.State wallRange = Rule.at(Collections.singletonList(timeRange), beforeGap, newYork);
+        equal(beforeGap + 60 * Rule.MINUTE, wallRange.next, "time ranges end at the selected local time");
+
+        timeRange.endMinute = timeRange.startMinute;
+        equal(1, timeRange.endsNextDay() ? 1 : 0, "matching times mean the next day");
+        equal(Rule.atMinute(LocalDate.of(2026, 3, 9), 60, newYork),
+                Rule.at(Collections.singletonList(timeRange), beforeGap, newYork).next,
+                "a full day ends at the same local time next day");
         equal(540, weekday.requestedDuration(), "existing overnight rule displays its duration");
         equal(20, quick.requestedDuration(), "one-shot displays its elapsed duration");
-        System.out.println("18 scheduling assertions passed");
+        equal(420, weekday.repeatEndMinute(), "overnight schedules show their saved end time");
+        equal(1, weekday.endsNextDay() ? 1 : 0, "overnight labels show that the end is the next day");
+        System.out.println("24 scheduling assertions passed");
     }
 
     private static Rule.State state(Rule rule, long time) {

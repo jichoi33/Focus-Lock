@@ -16,6 +16,7 @@ public final class FocusAdmin extends DeviceAdminReceiver {
     }
 
     @Override public void onDisabled(Context context, Intent intent) {
+        new SessionCompletion(context).cancelHard();
         context.stopService(new Intent(context, FocusService.class));
         AlarmReceiver.cancel(context);
     }

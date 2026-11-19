@@ -18,6 +18,8 @@ final class LockNotifications {
     static final String SOFT_CHANNEL = "soft_lock_session";
     private static final int SOFT_ID = 83;
     private static final int HARD_PREVIEW_ID = 85;
+    private static final int COMPLETION_ID = 86;
+    private static final String COMPLETION_CHANNEL = "focus_completion";
 
     private LockNotifications() {}
 
@@ -109,6 +111,26 @@ final class LockNotifications {
         long countdown = paused ? Math.min(remaining, breakUntil - SystemClock.elapsedRealtime()) : remaining;
         manager.notify(SOFT_ID, timer(context, SOFT_CHANNEL, session.test ? "Soft Lock test" : paused ? "Emergency break" : "Soft Lock",
                 System.currentTimeMillis() + countdown, true).setTimeoutAfter(remaining).build());
+    }
+
+    static void showCompletion(Context context, int modes) {
+        NotificationManager manager = context.getSystemService(NotificationManager.class);
+        if (!manager.areNotificationsEnabled()) return;
+        manager.createNotificationChannel(new NotificationChannel(COMPLETION_CHANNEL,
+                "Session completion", NotificationManager.IMPORTANCE_LOW));
+        boolean softOnly = modes == SessionCompletion.SOFT;
+        manager.notify(COMPLETION_ID, new Notification.Builder(context, COMPLETION_CHANNEL)
+                .setSmallIcon(R.drawable.ic_notification)
+                .setContentTitle("Focus complete")
+                .setContentText("Your focus session has ended. Tap to see your result.")
+                .setContentIntent(openApp(context, softOnly))
+                .setAutoCancel(true)
+                .setOnlyAlertOnce(true)
+                .build());
+    }
+
+    static void hideCompletion(Context context) {
+        context.getSystemService(NotificationManager.class).cancel(COMPLETION_ID);
     }
 
     static void hideSoft(Context context) {

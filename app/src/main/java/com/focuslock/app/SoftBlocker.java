@@ -66,6 +66,7 @@ public final class SoftBlocker extends AccessibilityService {
     };
     private SoftStore store;
     private FocusHistory history;
+    private SessionCompletion completion;
     private String sessionKey;
     private SoftStore.Session session;
     private SoftStore.Session test;
@@ -145,6 +146,7 @@ public final class SoftBlocker extends AccessibilityService {
         if (store == null) {
             store = new SoftStore(this);
             history = new FocusHistory(this, true);
+            completion = new SessionCompletion(this);
             store.observe(changed);
         }
         reload();
@@ -153,6 +155,7 @@ public final class SoftBlocker extends AccessibilityService {
     }
 
     private void reload() {
+        store.checkCompletion(new SessionClock(this), completion);
         if (test != null && !test.active(SystemClock.elapsedRealtime())) test = null;
         session = test == null ? store.read() : test;
         sessionKey = store.sessionId();
@@ -193,6 +196,9 @@ public final class SoftBlocker extends AccessibilityService {
         long now = SystemClock.elapsedRealtime();
         if (session == null) return;
         boolean softActive = session.active(now);
+        if (!softActive && !session.test && session.timer.elapsedEnd > 0) {
+            store.checkCompletion(new SessionClock(this), completion);
+        }
         boolean hardActive = now < FocusService.settingsBlockedUntil;
         if (breakUntil > 0 && breakUntil <= now) {
             breakUntil = 0;

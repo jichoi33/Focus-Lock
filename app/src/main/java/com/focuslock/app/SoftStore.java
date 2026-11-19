@@ -44,6 +44,11 @@ final class SoftStore {
 
     String sessionId() { return prefs.getString("session_id", "soft/legacy"); }
 
+    void checkCompletion(SessionClock clock, SessionCompletion completion) {
+        completion.checkSoft(clock, prefs.getLong("end", 0L), prefs.getLong("end_elapsed", 0L),
+                prefs.getInt("end_boot", -1), prefs.getString("session_id", null));
+    }
+
     Session read() {
         return new Session(deadline(new SessionClock(context), false),
                 prefs.getStringSet("apps", Collections.emptySet()),
@@ -138,7 +143,10 @@ final class SoftStore {
         TimedDeadline saved = new TimedDeadline(prefs.getInt("end_boot", -1),
                 prefs.getLong("end_elapsed", 0L), oldEnd, prefs.getLong("end_budget", Long.MAX_VALUE));
         TimedDeadline timer = rebase ? clock.rebase(saved) : clock.restore(saved);
-        if (timer != saved) putDeadline(prefs.edit(), timer).apply();
+        if (timer != saved) {
+            checkCompletion(clock, new SessionCompletion(context));
+            putDeadline(prefs.edit(), timer).apply();
+        }
         return timer;
     }
 

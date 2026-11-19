@@ -22,6 +22,7 @@ import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import java.time.Instant
@@ -89,6 +90,10 @@ internal fun durationLabel(total: Int): String = when {
 class MainActivity : ComponentActivity() {
     private lateinit var hardStore: FocusStore
     private lateinit var softStore: SoftStore
+    private lateinit var completionStore: SessionCompletion
+    private val completionChanged = SharedPreferences.OnSharedPreferenceChangeListener { _, key ->
+        if (key == SessionCompletion.PENDING) completedModes = completionStore.pending()
+    }
     private val handler = Handler(Looper.getMainLooper())
     private val updateBoundary = Runnable { update() }
     private val blockingChanged = Runnable { update() }
@@ -98,6 +103,8 @@ class MainActivity : ComponentActivity() {
     }
 
     internal var snapshot by mutableStateOf<FocusSnapshot?>(null)
+        private set
+    internal var completedModes by mutableIntStateOf(0)
         private set
     internal var mode by mutableStateOf(FocusMode.Hard)
     internal var quickDuration by mutableStateOf(DurationInput())
@@ -128,6 +135,7 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         hardStore = FocusStore(this)
         softStore = SoftStore(this)
+        completionStore = SessionCompletion(this)
         val session = softStore.read()
         mode = if (savedInstanceState != null) {
             if (savedInstanceState.getBoolean("soft_mode")) FocusMode.Soft else FocusMode.Hard
@@ -166,6 +174,7 @@ class MainActivity : ComponentActivity() {
         super.onNewIntent(intent)
         setIntent(intent)
         intent.lockMode()?.let { mode = it }
+        update()
     }
 
     private fun Intent?.lockMode(): FocusMode? = when (this?.action) {
@@ -201,6 +210,7 @@ class MainActivity : ComponentActivity() {
         super.onResume()
         hardStore.observe(hardChanged)
         softStore.observe(softChanged)
+        completionStore.observe(completionChanged)
         SoftBlocker.observeConnection(blockingChanged)
         FocusService.enforcementChanged = blockingChanged
         refreshHard()
@@ -210,6 +220,7 @@ class MainActivity : ComponentActivity() {
     override fun onPause() {
         hardStore.unobserve(hardChanged)
         softStore.unobserve(softChanged)
+        completionStore.unobserve(completionChanged)
         SoftBlocker.unobserveConnection(blockingChanged)
         if (FocusService.enforcementChanged === blockingChanged) FocusService.enforcementChanged = null
         handler.removeCallbacks(updateBoundary)
@@ -219,9 +230,12 @@ class MainActivity : ComponentActivity() {
     private fun update() {
         val clock = SessionClock(this)
         val rules = hardStore.rules()
+        softStore.checkCompletion(clock, completionStore)
         val savedSoft = softStore.read()
         val soft = SoftBlocker.activeTest() ?: savedSoft
         val windows = Rule.at(rules, clock.wall, clock.elapsed, clock.boot, ZoneId.systemDefault())
+        completionStore.reconcileHard(clock, windows)
+        completedModes = completionStore.pending()
         val hardEndElapsed = if (windows.active.isEmpty()) 0L else clock.elapsed + (windows.activeEnd() - clock.wall)
         snapshot = FocusSnapshot(
             rules, windows, hardEndElapsed, FocusService.settingsBlockedUntil > clock.elapsed, soft, softStore.sessionId(),
@@ -237,6 +251,11 @@ class MainActivity : ComponentActivity() {
         val until = snapshot?.breaks?.until ?: 0L
         val nextDelay = minOf(hardDelay, softDelay, if (until > clock.elapsed) until - clock.elapsed else Long.MAX_VALUE)
         if (nextDelay != Long.MAX_VALUE) handler.postDelayed(updateBoundary, nextDelay.coerceAtLeast(1L))
+    }
+
+    internal fun dismissCompletion() {
+        completionStore.dismiss()
+        completedModes = 0
     }
 
     internal fun refreshHard() {
@@ -470,7 +489,7 @@ class MainActivity : ComponentActivity() {
             to = from + 45 * Rule.MINUTE
             days = if (repeating) 31 else 0
             startMinute = 22 * 60
-            durationMinutes = 9 * 60
+            endMinute = 7 * 60
         }
     }
 
@@ -478,20 +497,30 @@ class MainActivity : ComponentActivity() {
         schedule = null
     }
 
-    internal fun saveSchedule(rule: Rule, name: String, days: Int, startMinute: Int, from: Long,
-        duration: DurationInput) {
+    internal fun saveRepeatingSchedule(rule: Rule, name: String, days: Int, start: Int, end: Int) {
+        if (days == 0) return notify("Choose at least one day.")
+        if (rule.enabled && !requireHard(exact = true)) return
+        if (start != rule.startMinute || end != rule.repeatEndMinute()) {
+            rule.durationMinutes = 0
+        }
+        rule.days = days
+        rule.startMinute = start
+        rule.endMinute = end
+        saveSchedule(rule, name, "Repeating lock")
+    }
+
+    internal fun saveOneTimeSchedule(rule: Rule, name: String, from: Long, duration: DurationInput) {
         val minutes = duration.total ?: return invalidDuration()
         val until = from + minutes * Rule.MINUTE
-        val repeating = rule.repeats()
-        if (repeating && days == 0) return notify("Choose at least one day.")
-        if (!repeating && until <= System.currentTimeMillis()) return notify("Choose a time and duration so the lock ends in the future.")
+        if (until <= System.currentTimeMillis()) return notify("Choose a time and duration so the lock ends in the future.")
         if (rule.enabled && !requireHard(exact = true)) return
-        rule.name = name.trim().ifBlank { if (repeating) "Repeating lock" else "One-time lock" }
-        rule.days = if (repeating) days else 0
-        rule.startMinute = startMinute
-        rule.durationMinutes = minutes
         rule.from = from
         rule.to = until
+        saveSchedule(rule, name, "One-time lock")
+    }
+
+    private fun saveSchedule(rule: Rule, name: String, defaultName: String) {
+        rule.name = name.trim().ifBlank { defaultName }
         hardStore.put(rule)
         dismissSchedule()
         refreshHard()

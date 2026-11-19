@@ -40,6 +40,7 @@ public final class FocusService extends Service {
     private final Handler handler = new Handler(Looper.getMainLooper());
     private FocusStore store;
     private FocusHistory history;
+    private SessionCompletion completion;
     private NotificationManager notifications;
     private KeyguardManager keyguard;
     private PowerManager power;
@@ -80,6 +81,7 @@ public final class FocusService extends Service {
         running = true;
         store = new FocusStore(this);
         history = new FocusHistory(this, false);
+        completion = new SessionCompletion(this);
         notifications = getSystemService(NotificationManager.class);
         keyguard = getSystemService(KeyguardManager.class);
         power = getSystemService(PowerManager.class);
@@ -147,6 +149,8 @@ public final class FocusService extends Service {
 
         if (state.active.isEmpty() || !FocusAdmin.enabled(this)
                 || !keyguard.isDeviceSecure()) {
+            if (state.active.isEmpty()) completion.reconcileHard(clock, state);
+            else completion.cancelHard();
             if (!foreground) publish(notification("Starting Hard Lock", 0, false, false, false));
             setEnforcedUntil(0L);
             stopSelf();
@@ -159,7 +163,11 @@ public final class FocusService extends Service {
         boolean paused = !testing && breaks.until > clock.elapsed;
         long noticeEnd = paused ? clock.wall + Math.min(end - clock.wall, breaks.until - clock.elapsed) : end;
         updateNotice(noticeEnd, hasQuick, breaks, paused, testing);
-        if (!paused && !enforce()) return;
+        if (!paused && !enforce()) {
+            completion.cancelHard();
+            return;
+        }
+        completion.trackHard(clock, state);
         long protectionEnd = clock.elapsed + (end - clock.wall);
         java.util.Set<String> sessions = new java.util.HashSet<>();
         long regularEnd = 0;
