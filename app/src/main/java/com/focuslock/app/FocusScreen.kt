@@ -17,8 +17,6 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.semantics.Role
-import androidx.compose.ui.semantics.clearAndSetSemantics
-import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.tooling.preview.Preview
@@ -270,8 +268,7 @@ private fun ScheduleCard(activity: MainActivity, rule: Rule, active: Boolean,
             if (rule.repeats()) {
                 Text("${activity.timeLabel(rule.startMinute)} → ${activity.timeLabel(rule.repeatEndMinute())}",
                     style = MaterialTheme.typography.titleLarge)
-                dayPresets[rule.days]?.let { Caption(it) }
-                StartDays(rule.days)
+                Caption(repeatingDaysLabel(rule.days))
                 if (rule.endsNextDay()) Caption("Ends the next day")
             } else {
                 Text(activity.dateLabel(rule.from), style = MaterialTheme.typography.titleLarge)
@@ -282,28 +279,6 @@ private fun ScheduleCard(activity: MainActivity, rule: Rule, active: Boolean,
         if (!active) {
             TextButton(onClick = if (ended) onDelete else onToggle, modifier = Modifier.padding(start = 8.dp)) {
                 Text(if (ended) "Delete" else if (rule.enabled) "Turn off" else "Turn on")
-            }
-        }
-    }
-}
-
-@OptIn(ExperimentalLayoutApi::class)
-@Composable
-private fun StartDays(days: Int) {
-    val colors = MaterialTheme.colorScheme
-    FlowRow(
-        Modifier.fillMaxWidth().clearAndSetSemantics { contentDescription = "Starts on ${daysLabel(days)}" },
-        horizontalArrangement = Arrangement.spacedBy(5.dp),
-        verticalArrangement = Arrangement.spacedBy(4.dp)
-    ) {
-        focusDays.forEachIndexed { index, day ->
-            val selected = days and (1 shl index) != 0
-            Surface(shape = RoundedCornerShape(7.dp),
-                color = if (selected) colors.primaryContainer else colors.surfaceContainer,
-                contentColor = if (selected) colors.onPrimaryContainer else colors.onSurfaceVariant) {
-                Text(day, Modifier.padding(horizontal = 6.dp, vertical = 4.dp),
-                    style = MaterialTheme.typography.labelMedium,
-                    fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal)
             }
         }
     }

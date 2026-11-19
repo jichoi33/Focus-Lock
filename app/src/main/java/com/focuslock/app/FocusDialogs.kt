@@ -22,7 +22,9 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
@@ -430,7 +432,6 @@ private fun ScheduleDialog(activity: MainActivity, rule: Rule) {
     val close = activity::dismissSchedule
     var name by remember { mutableStateOf(rule.name.orEmpty()) }
     var days by remember { mutableIntStateOf(rule.days) }
-    var customDays by remember { mutableStateOf(rule.days !in dayPresets) }
     var startMinute by remember { mutableIntStateOf(rule.startMinute) }
     var endMinute by remember { mutableIntStateOf(rule.repeatEndMinute()) }
     var firstAt by remember { mutableLongStateOf(rule.from) }
@@ -456,29 +457,7 @@ private fun ScheduleDialog(activity: MainActivity, rule: Rule) {
                     endMinute < startMinute -> Caption("Ends the next day")
                 }
                 Text("Starts on", style = MaterialTheme.typography.titleMedium)
-                FlowRow(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    dayPresets.forEach { (mask, label) ->
-                        FilterChip(!customDays && days == mask, {
-                            customDays = false
-                            days = mask
-                        },
-                            label = { Text(label) })
-                    }
-                    FilterChip(customDays, { customDays = true }, label = { Text("Custom") })
-                }
-                if (customDays) {
-                    Surface(shape = RoundedCornerShape(14.dp), color = MaterialTheme.colorScheme.surfaceContainer) {
-                        Column(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp)) {
-                            Text("Choose start days", style = MaterialTheme.typography.labelLarge)
-                            FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                focusDays.forEachIndexed { index, day ->
-                                    val bit = 1 shl index
-                                    FilterChip(days and bit != 0, { days = days xor bit }, label = { Text(day) })
-                                }
-                            }
-                        }
-                    }
-                } else Caption(daysLabel(days))
+                ScheduleDayPicker(days) { days = it }
                 if (days == 0) Caption("Choose at least one start day.")
                 if (days == 127 && startMinute == endMinute) {
                     Text("Runs every day without a planned gap.", color = MaterialTheme.colorScheme.error,
@@ -519,6 +498,41 @@ private fun ScheduleDialog(activity: MainActivity, rule: Rule) {
                 else -> startMinute = selected
             }
             timeField = null
+        }
+    }
+}
+
+@Composable
+private fun ScheduleDayPicker(days: Int, onChange: (Int) -> Unit) {
+    val colors = MaterialTheme.colorScheme
+    BoxWithConstraints(Modifier.fillMaxWidth()) {
+        val gap = 4.dp
+        val dayWidth = (28 * LocalDensity.current.fontScale + 6).dp
+        val wrap = maxWidth < dayWidth * focusDays.size + gap * (focusDays.size - 1)
+        FlowRow(
+            Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(gap),
+            maxItemsInEachRow = if (wrap) 4 else focusDays.size
+        ) {
+            focusDays.forEachIndexed { index, day ->
+                val bit = 1 shl index
+                val selected = days and bit != 0
+                Box(Modifier.weight(1f).heightIn(min = 48.dp)
+                    .toggleable(value = selected, role = Role.Checkbox, onValueChange = { onChange(days xor bit) }),
+                    contentAlignment = Alignment.Center) {
+                    Surface(
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(7.dp),
+                        color = if (selected) colors.primaryContainer else colors.surfaceContainer,
+                        contentColor = if (selected) colors.onPrimaryContainer else colors.onSurfaceVariant
+                    ) {
+                        Box(Modifier.padding(horizontal = 3.dp, vertical = 6.dp), contentAlignment = Alignment.Center) {
+                            Text(day, style = MaterialTheme.typography.labelMedium,
+                                fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal)
+                        }
+                    }
+                }
+            }
         }
     }
 }
