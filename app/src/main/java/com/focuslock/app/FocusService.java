@@ -195,7 +195,8 @@ public final class FocusService extends Service {
     private boolean handleCompletion(SessionClock clock, boolean justUnlocked) {
         long remaining = completion.autoOpenRemaining(clock);
         if (remaining == 0) return false;
-        if (justUnlocked && !keyguard.isKeyguardLocked()) {
+        boolean unlocked = !keyguard.isKeyguardLocked();
+        if (unlocked && (justUnlocked || foregroundId == WAITING_NOTICE_ID)) {
             completion.consumeAutoOpen();
             if (enforcementChanged == null) {
                 try {
@@ -208,14 +209,15 @@ public final class FocusService extends Service {
             }
             return false;
         }
-        if (!keyguard.isKeyguardLocked()) return false;
+        if (unlocked) return false;
 
         if (foregroundId != WAITING_NOTICE_ID) {
             publish(WAITING_NOTICE_ID,
                     LockNotifications.completion(this, completion.pending()).setAutoCancel(false).setOngoing(true).build());
             LockNotifications.hideCompletion(this);
         }
-        handler.postDelayed(tick, remaining);
+        long delay = SystemClock.uptimeMillis() < retryUnlockUntil ? UNLOCK_RETRY_MS : remaining;
+        handler.postDelayed(tick, Math.min(delay, remaining));
         return true;
     }
 

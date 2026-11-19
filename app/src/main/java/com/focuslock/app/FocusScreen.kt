@@ -22,6 +22,8 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
 import java.util.Locale
 import kotlinx.coroutines.delay
 
@@ -31,7 +33,8 @@ internal fun FocusWorkspace(activity: MainActivity) {
     val completed = activity.completedModes
     val hardActive = state.hard.active.isNotEmpty() && state.admin && state.secure
     val dialogOpen = activity.sheet != null || activity.schedule != null || activity.prompt != null || activity.scheduleConfirmation != null
-    if (completed != 0 && !hardActive && !state.keyguardLocked && !dialogOpen) {
+    val showCompletion = completed != 0 && !hardActive && !state.keyguardLocked
+    if (showCompletion && !dialogOpen) {
         BackHandler(onBack = activity::dismissCompletion)
         CompletionScreen(completed, activity.completionDescription, activity::dismissCompletion)
         return
@@ -62,6 +65,14 @@ internal fun FocusWorkspace(activity: MainActivity) {
         }
     }
     WorkspaceDialogs(activity, state)
+    if (showCompletion && activity.autoCelebration && completed and SessionCompletion.HARD != 0) {
+        Dialog(
+            onDismissRequest = activity::dismissCompletion,
+            properties = DialogProperties(usePlatformDefaultWidth = false, decorFitsSystemWindows = false)
+        ) {
+            CompletionScreen(completed, activity.completionDescription, activity::dismissCompletion)
+        }
+    }
 }
 
 @Composable
