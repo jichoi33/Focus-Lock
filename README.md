@@ -16,7 +16,13 @@ Download the signed APK from the [latest release](../../releases/latest) and ope
 
 ## Session completion
 
-Completed Hard and Soft Locks show a celebration in Focus Lock. If the app is in the background, tap the completion notification or open the app after unlocking. One-minute tests do not show a celebration.
+Completed Hard and Soft Locks show a celebration in Focus Lock and identify the finished session. If the app is in the background, tap the completion notification or open the app after unlocking. One-minute tests do not show a celebration.
+
+## Scheduled Hard Lock
+
+Repeating locks preview the next occurrence with its actual start and end dates. If a schedule could begin immediately, confirm the start or choose its next occurrence. Daily schedules with matching start and end times run continuously and ask for confirmation.
+
+Focus Lock schedules a reminder five minutes before a scheduled Hard Lock. Tapping it opens the schedule. You can manage reminders from Focus Lock settings. Android can delay notifications in Doze.
 
 ## Emergency breaks
 

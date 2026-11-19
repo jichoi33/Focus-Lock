@@ -131,6 +131,34 @@ internal fun WorkspaceDialogs(activity: MainActivity, state: FocusSnapshot) {
     activity.schedule?.let { rule ->
         key(rule.id) { ScheduleDialog(activity, rule) }
     }
+    activity.scheduleConfirmation?.let { confirmation ->
+        val dismiss = { activity.scheduleConfirmation = null }
+        FocusDialog(if (confirmation.active == null) "Confirm repeating lock" else "This lock can start now", dismiss) {
+            if (confirmation.continuous) {
+                Text("This schedule runs every day without a planned gap between locks.",
+                    color = MaterialTheme.colorScheme.error)
+            }
+            confirmation.active?.let { window ->
+                Text("Start now", style = MaterialTheme.typography.titleMedium)
+                Caption("Locks immediately until ${scheduleDateLabel(window.end)}.")
+            }
+            val next = confirmation.next
+            if (next != null) {
+                Text("Next occurrence", style = MaterialTheme.typography.titleMedium)
+                Caption(windowLabel(next))
+            }
+            if (confirmation.active != null) {
+                PrimaryButton("Start now", { confirmation.apply(false) })
+                if (next != null) {
+                    OutlinedButton(onClick = { confirmation.apply(true) }, modifier = Modifier.fillMaxWidth()) {
+                        Text("Start next occurrence")
+                    }
+                }
+            } else {
+                PrimaryButton("Save schedule", { confirmation.apply(false) })
+            }
+        }
+    }
     activity.prompt?.let { prompt ->
         val dismiss = { activity.prompt = null }
         AlertDialog(
@@ -202,6 +230,9 @@ private fun SettingsDialog(activity: MainActivity, state: FocusSnapshot, close: 
                 ActionRow("Lock screen notifications", "Hard Lock countdown and controls") {
                     activity.sheet = "hard_notifications"
                 }
+                InsetDivider()
+                ActionRow("Scheduled lock reminders", "5 minutes before Hard Lock",
+                    onClick = activity::openScheduleReminderSettings)
             }
             if (!state.softNotifications) {
                 GroupCard {
@@ -375,6 +406,18 @@ private fun ScheduleDialog(activity: MainActivity, rule: Rule) {
     var dateDialog by remember { mutableStateOf(false) }
     var timeField by remember { mutableStateOf<String?>(null) }
     var date by remember { mutableStateOf(Instant.ofEpochMilli(firstAt).atZone(ZoneId.systemDefault()).toLocalDate()) }
+    var now by remember { mutableLongStateOf(System.currentTimeMillis()) }
+    LaunchedEffect(repeating) {
+        if (repeating) while (true) {
+            kotlinx.coroutines.delay(1_000)
+            now = System.currentTimeMillis()
+        }
+    }
+    val draft = if (repeating && days != 0) rule.withRepeatTimes(days, startMinute, endMinute) else null
+    val zone = ZoneId.systemDefault()
+    val preview = remember(days, startMinute, endMinute, now, zone) {
+        draft?.let { Rule.at(listOf(it.apply { enabled = true }), now, zone) }
+    }
 
     FocusDialog(if (repeating) "Repeating lock" else "One-time lock", close, {
         if (repeating) activity.saveRepeatingSchedule(rule, name, days, startMinute, endMinute)
@@ -406,6 +449,20 @@ private fun ScheduleDialog(activity: MainActivity, rule: Rule) {
                     }
                 }
                 if (days == 0) Caption("Choose at least one start day.")
+                preview?.let { state ->
+                    if (draft?.repeatsWithoutGap() == true) {
+                        Text("Runs every day without a planned gap.", color = MaterialTheme.colorScheme.error,
+                            style = MaterialTheme.typography.bodyMedium)
+                    }
+                    state.latestActive()?.let {
+                        if (rule.enabled) Caption("If started now, this lock ends ${scheduleDateLabel(it.end)}.")
+                    }
+                    state.nextStart?.let {
+                        Text(if (rule.enabled) "Next occurrence" else "Next occurrence if enabled",
+                            style = MaterialTheme.typography.titleMedium)
+                        Caption(windowLabel(it))
+                    }
+                }
             } else {
                 GroupCard {
                     ActionRow("Start", value = dateLabel(firstAt)) { dateDialog = true }

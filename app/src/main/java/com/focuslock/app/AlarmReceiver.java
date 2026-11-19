@@ -32,6 +32,7 @@ public final class AlarmReceiver extends BroadcastReceiver {
         AlarmManager manager = context.getSystemService(AlarmManager.class);
         manager.cancel(alarm(context, WALL_CODE));
         manager.cancel(alarm(context, ELAPSED_CODE));
+        ScheduleReminders.cancel(context);
     }
 
     static void schedule(Context context, Rule.State state) {
@@ -43,6 +44,7 @@ public final class AlarmReceiver extends BroadcastReceiver {
         long until = state.active.isEmpty() ? 0 : EmergencyBreaks.current(context).until;
         scheduleOne(context, ELAPSED_CODE, AlarmManager.ELAPSED_REALTIME_WAKEUP,
                 until > 0 ? Math.min(until, state.nextElapsed) : state.nextElapsed);
+        ScheduleReminders.schedule(context, state);
     }
 
     private static void scheduleOne(Context context, int code, int type, long when) {
@@ -72,6 +74,11 @@ public final class AlarmReceiver extends BroadcastReceiver {
         }
         SessionClock clock = new SessionClock(context);
         Rule.State state = store.state(clock);
+        if (ScheduleReminders.ACTION.equals(intent.getAction())) {
+            if (FocusAdmin.enabled(context)) ScheduleReminders.schedule(context, state);
+            else ScheduleReminders.cancel(context);
+            return;
+        }
         new SessionCompletion(context).reconcileHard(clock, state);
         schedule(context, state);
         boolean admin = FocusAdmin.enabled(context);

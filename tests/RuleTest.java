@@ -76,7 +76,31 @@ public final class RuleTest {
         equal(20, quick.requestedDuration(), "one-shot displays its elapsed duration");
         equal(420, weekday.repeatEndMinute(), "overnight schedules show their saved end time");
         equal(1, weekday.endsNextDay() ? 1 : 0, "overnight labels show that the end is the next day");
-        System.out.println("24 scheduling assertions passed");
+        Rule overnight = weekday.withRepeatTimes(31, 22 * 60, 7 * 60);
+        overnight.skippedThrough = 0;
+        Rule.State current = state(overnight, friday + Rule.MINUTE);
+        equal(friday, current.latestActive().start, "the save prompt sees the current Friday occurrence");
+        equal(saturday, current.latestActive().end, "the save prompt shows the actual overnight end");
+        equal(monday, current.nextStart.start, "the preview shows Monday as the next occurrence");
+        equal(at("2026-11-24T07:00:00"), current.nextStart.end, "the next occurrence includes the following date");
+        overnight.skippedThrough = current.latestActive().start + 1;
+        equal(0, state(overnight, friday + Rule.MINUTE).active.size(), "deferred save leaves Friday inactive");
+        equal(1, state(overnight, monday).active.size(), "deferred schedule starts on Monday");
+        equal(0, overnight.repeatsWithoutGap() ? 1 : 0, "weekday schedules have a weekend gap");
+        equal(1, overnight.withRepeatTimes(127, 540, 540).repeatsWithoutGap() ? 1 : 0, "equal daily times are continuous");
+
+        Rule renamed = durationRule.withRepeatTimes(64, 60, 180);
+        equal(120, renamed.durationMinutes, "editing the name or days retains legacy duration");
+        Rule.Window dstPreview = Rule.at(Collections.singletonList(renamed), beforeGap - Rule.MINUTE, newYork).nextStart;
+        equal(beforeGap + 120 * Rule.MINUTE, dstPreview.end, "legacy preview uses the scheduler's DST-adjusted end");
+        equal(0, durationRule.withRepeatTimes(64, 60, 240).durationMinutes, "editing the times opts into wall-clock scheduling");
+        equal(1, state(quick, now - 1).upcoming.size(), "future one-time locks can generate reminders");
+        Rule instant = quick.copy();
+        instant.id = Rule.QUICK_ID;
+        equal(0, state(instant, now - 1).upcoming.size(), "quick locks never generate schedule reminders");
+
+        System.out.println("37 scheduling assertions passed");
+
     }
 
     private static Rule.State state(Rule rule, long time) {

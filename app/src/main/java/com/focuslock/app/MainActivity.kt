@@ -5,8 +5,10 @@ import android.app.KeyguardManager
 import android.app.NotificationManager
 import android.app.admin.DevicePolicyManager
 import android.content.ActivityNotFoundException
+import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
+import android.content.IntentFilter
 import android.content.SharedPreferences
 import android.content.res.Configuration
 import android.net.Uri
@@ -51,11 +53,19 @@ internal data class DurationInput(val hours: String = "0", val minutes: String =
 
 internal data class Prompt(val title: String, val text: String, val action: String, val confirm: () -> Unit)
 
+internal data class ScheduleConfirmation(
+    val continuous: Boolean,
+    val active: Rule.Window?,
+    val next: Rule.Window?,
+    val apply: (Boolean) -> Unit
+)
+
 internal data class FocusSnapshot(
     val rules: List<Rule>,
     val hard: Rule.State,
     val hardEndElapsed: Long,
     val hardEnforced: Boolean,
+    val keyguardLocked: Boolean,
     val soft: SoftStore.Session,
     val softSessionId: String,
     val secure: Boolean,
@@ -70,9 +80,14 @@ internal data class FocusSnapshot(
 
 internal val focusDays = listOf("Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun")
 private val calendarFormat = DateTimeFormatter.ofPattern("MMM d, h:mm a", Locale.ENGLISH)
+private val scheduleDateFormat = DateTimeFormatter.ofPattern("EEE, MMM d · HH:mm", Locale.ENGLISH)
 private val timeFormat = DateTimeFormatter.ofPattern("HH:mm", Locale.ROOT)
 
 internal fun dateLabel(time: Long): String = Instant.ofEpochMilli(time).atZone(ZoneId.systemDefault()).format(calendarFormat)
+internal fun scheduleDateLabel(time: Long): String =
+    Instant.ofEpochMilli(time).atZone(ZoneId.systemDefault()).format(scheduleDateFormat)
+internal fun windowLabel(window: Rule.Window): String =
+    "${scheduleDateLabel(window.start)} → ${scheduleDateLabel(window.end)}"
 internal fun timeLabel(minute: Int): String = LocalTime.of(minute / 60, minute % 60).format(timeFormat)
 internal fun daysLabel(mask: Int): String = when (mask) {
     0 -> "Choose days"
@@ -92,7 +107,9 @@ class MainActivity : ComponentActivity() {
     private lateinit var softStore: SoftStore
     private lateinit var completionStore: SessionCompletion
     private val completionChanged = SharedPreferences.OnSharedPreferenceChangeListener { _, key ->
-        if (key == SessionCompletion.PENDING) completedModes = completionStore.pending()
+        if (key == SessionCompletion.PENDING || key == SessionCompletion.HARD_RESULT || key == SessionCompletion.SOFT_RESULT) {
+            updateCompletion()
+        }
     }
     private val handler = Handler(Looper.getMainLooper())
     private val updateBoundary = Runnable { update() }
@@ -103,6 +120,13 @@ class MainActivity : ComponentActivity() {
     }
 
     internal var snapshot by mutableStateOf<FocusSnapshot?>(null)
+        private set
+    private val unlocked = object : BroadcastReceiver() {
+        override fun onReceive(context: Context, intent: Intent) {
+            update()
+        }
+    }
+    internal var completionDescription by mutableStateOf("")
         private set
     internal var completedModes by mutableIntStateOf(0)
         private set
@@ -115,6 +139,7 @@ class MainActivity : ComponentActivity() {
     internal var blockedApps by mutableStateOf(emptySet<String>())
     internal var allowedApps by mutableStateOf(emptySet<String>())
     internal var blockedSites by mutableStateOf(emptySet<String>())
+    internal var scheduleConfirmation by mutableStateOf<ScheduleConfirmation?>(null)
     internal var prompt by mutableStateOf<Prompt?>(null)
     internal var schedule by mutableStateOf<Rule?>(null)
     internal var sheet by mutableStateOf<String?>(null)
@@ -122,7 +147,7 @@ class MainActivity : ComponentActivity() {
         private set
 
     private val notificationPermission = registerForActivityResult(ActivityResultContracts.RequestPermission()) {
-        update()
+        refreshHard()
         refreshSoftNotification()
     }
 
@@ -155,6 +180,7 @@ class MainActivity : ComponentActivity() {
         allowlist = savedInstanceState?.getBoolean("allowlist") ?: session.allowlist
         styleSystemBars(resources.configuration)
         update()
+        openReminderSchedule(intent)
         setContent { FocusTheme { FocusWorkspace(this) } }
     }
 
@@ -175,10 +201,19 @@ class MainActivity : ComponentActivity() {
         setIntent(intent)
         intent.lockMode()?.let { mode = it }
         update()
+        openReminderSchedule(intent)
+    }
+
+    private fun openReminderSchedule(intent: Intent) {
+        if (intent.action != LockNotifications.OPEN_SCHEDULE || schedule != null || sheet != null || prompt != null) return
+        val id = intent.getStringExtra(LockNotifications.RULE_ID)
+        val current = snapshot ?: return
+        if (current.hard.active.any { it.rule.id == id }) return
+        schedule = current.rules.firstOrNull { it.id == id && it.enabled && !it.quick() }
     }
 
     private fun Intent?.lockMode(): FocusMode? = when (this?.action) {
-        LockNotifications.OPEN_HARD -> FocusMode.Hard
+        LockNotifications.OPEN_HARD, LockNotifications.OPEN_SCHEDULE -> FocusMode.Hard
         LockNotifications.OPEN_SOFT -> FocusMode.Soft
         else -> null
     }
@@ -204,6 +239,18 @@ class MainActivity : ComponentActivity() {
         outState.putStringArrayList("allowed_apps", ArrayList(allowedApps))
         outState.putStringArrayList("soft_sites", ArrayList(blockedSites))
         super.onSaveInstanceState(outState)
+    }
+
+    override fun onStart() {
+        super.onStart()
+        val filter = IntentFilter(Intent.ACTION_USER_PRESENT)
+        if (Build.VERSION.SDK_INT >= 33) registerReceiver(unlocked, filter, Context.RECEIVER_EXPORTED)
+        else registerReceiver(unlocked, filter)
+    }
+
+    override fun onStop() {
+        unregisterReceiver(unlocked)
+        super.onStop()
     }
 
     override fun onResume() {
@@ -235,11 +282,12 @@ class MainActivity : ComponentActivity() {
         val soft = SoftBlocker.activeTest() ?: savedSoft
         val windows = Rule.at(rules, clock.wall, clock.elapsed, clock.boot, ZoneId.systemDefault())
         completionStore.reconcileHard(clock, windows)
-        completedModes = completionStore.pending()
+        updateCompletion()
+        val keyguard = getSystemService(KeyguardManager::class.java)
         val hardEndElapsed = if (windows.active.isEmpty()) 0L else clock.elapsed + (windows.activeEnd() - clock.wall)
         snapshot = FocusSnapshot(
-            rules, windows, hardEndElapsed, FocusService.settingsBlockedUntil > clock.elapsed, soft, softStore.sessionId(),
-            getSystemService(KeyguardManager::class.java).isDeviceSecure,
+            rules, windows, hardEndElapsed, FocusService.settingsBlockedUntil > clock.elapsed, keyguard.isKeyguardLocked,
+            soft, softStore.sessionId(), keyguard.isDeviceSecure,
             FocusAdmin.enabled(this), AlarmReceiver.canSchedule(this),
             LockNotifications.hardVisible(this),
             LockNotifications.available(this, true),
@@ -253,9 +301,14 @@ class MainActivity : ComponentActivity() {
         if (nextDelay != Long.MAX_VALUE) handler.postDelayed(updateBoundary, nextDelay.coerceAtLeast(1L))
     }
 
+    private fun updateCompletion() {
+        completedModes = completionStore.pending()
+        completionDescription = completionStore.description()
+    }
+
     internal fun dismissCompletion() {
         completionStore.dismiss()
-        completedModes = 0
+        updateCompletion()
     }
 
     internal fun refreshHard() {
@@ -301,6 +354,15 @@ class MainActivity : ComponentActivity() {
     }
 
     internal fun enableNotifications(soft: Boolean) {
+        openNotificationSettings(if (soft) LockNotifications.SOFT_CHANNEL else FocusService.CHANNEL)
+    }
+
+    internal fun openScheduleReminderSettings() {
+        ScheduleReminders.channel(this)
+        openNotificationSettings(ScheduleReminders.CHANNEL)
+    }
+
+    private fun openNotificationSettings(channel: String) {
         val asked = getPreferences(MODE_PRIVATE)
         if (Build.VERSION.SDK_INT >= 33 &&
             !getSystemService(NotificationManager::class.java).areNotificationsEnabled() &&
@@ -313,7 +375,6 @@ class MainActivity : ComponentActivity() {
             if (!getSystemService(NotificationManager::class.java).areNotificationsEnabled()) {
                 startActivity(appSettings)
             } else {
-                val channel = if (soft) LockNotifications.SOFT_CHANNEL else FocusService.CHANNEL
                 val channelSettings = Intent(Settings.ACTION_CHANNEL_NOTIFICATION_SETTINGS)
                     .putExtra(Settings.EXTRA_APP_PACKAGE, packageName)
                     .putExtra(Settings.EXTRA_CHANNEL_ID, channel)
@@ -499,38 +560,51 @@ class MainActivity : ComponentActivity() {
 
     internal fun saveRepeatingSchedule(rule: Rule, name: String, days: Int, start: Int, end: Int) {
         if (days == 0) return notify("Choose at least one day.")
-        if (rule.enabled && !requireHard(exact = true)) return
-        if (start != rule.startMinute || end != rule.repeatEndMinute()) {
-            rule.durationMinutes = 0
-        }
-        rule.days = days
-        rule.startMinute = start
-        rule.endMinute = end
-        saveSchedule(rule, name, "Repeating lock")
+        val draft = rule.withRepeatTimes(days, start, end)
+        draft.name = name.trim().ifBlank { "Repeating lock" }
+        applySchedule(draft)
     }
 
     internal fun saveOneTimeSchedule(rule: Rule, name: String, from: Long, duration: DurationInput) {
         val minutes = duration.total ?: return invalidDuration()
-        val until = from + minutes * Rule.MINUTE
-        if (until <= System.currentTimeMillis()) return notify("Choose a time and duration so the lock ends in the future.")
-        if (rule.enabled && !requireHard(exact = true)) return
-        rule.from = from
-        rule.to = until
-        saveSchedule(rule, name, "One-time lock")
+        val draft = rule.copy()
+        draft.from = from
+        draft.to = from + minutes * Rule.MINUTE
+        draft.name = name.trim().ifBlank { "One-time lock" }
+        applySchedule(draft)
     }
 
-    private fun saveSchedule(rule: Rule, name: String, defaultName: String) {
-        rule.name = name.trim().ifBlank { defaultName }
-        hardStore.put(rule)
+    private fun applySchedule(draft: Rule, confirmed: ScheduleConfirmation? = null, defer: Boolean = false) {
+        val now = System.currentTimeMillis()
+        if (!draft.repeats() && draft.to <= now) {
+            return notify("Choose a time and duration so the lock ends in the future.")
+        }
+        if (draft.enabled && !requireHard(exact = true)) return
+        val state = Rule.at(listOf(draft), now, ZoneId.systemDefault())
+        val active = state.latestActive()
+        val continuous = draft.enabled && draft.repeatsWithoutGap()
+        val sameOccurrence = active?.start == confirmed?.active?.start && active?.end == confirmed?.active?.end
+        val confirmedOccurrence = confirmed != null && (active == null || sameOccurrence)
+        if ((active != null || continuous) && !confirmedOccurrence) {
+            val proposal = ScheduleConfirmation(continuous, active, state.nextStart) { nextOnly ->
+                val confirmedSelection = scheduleConfirmation
+                scheduleConfirmation = null
+                applySchedule(draft, confirmedSelection, nextOnly)
+            }
+            scheduleConfirmation = proposal
+            return
+        }
+        if (defer && active != null) {
+            draft.skippedThrough = maxOf(draft.skippedThrough, active.start + 1)
+        }
+        scheduleConfirmation = null
+        hardStore.put(draft)
         dismissSchedule()
         refreshHard()
     }
 
     internal fun toggleSchedule(rule: Rule) {
-        if (!rule.enabled && !requireHard(exact = true)) return
-        rule.enabled = !rule.enabled
-        hardStore.put(rule)
-        refreshHard()
+        applySchedule(rule.copy().apply { enabled = !enabled })
     }
 
     internal fun deleteSchedule(rule: Rule) {

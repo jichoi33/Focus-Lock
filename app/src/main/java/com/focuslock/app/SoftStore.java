@@ -46,7 +46,7 @@ final class SoftStore {
 
     void checkCompletion(SessionClock clock, SessionCompletion completion) {
         completion.checkSoft(clock, prefs.getLong("end", 0L), prefs.getLong("end_elapsed", 0L),
-                prefs.getInt("end_boot", -1), prefs.getString("session_id", null));
+                prefs.getInt("end_boot", -1), prefs.getString("session_id", null), prefs.getBoolean("allowlist", false));
     }
 
     Session read() {

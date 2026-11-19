@@ -13,6 +13,8 @@ import java.util.Date;
 import java.util.Locale;
 
 final class LockNotifications {
+    static final String OPEN_SCHEDULE = "com.focuslock.app.SHOW_SCHEDULE";
+    static final String RULE_ID = "rule_id";
     static final String OPEN_HARD = "com.focuslock.app.SHOW_HARD_LOCK";
     static final String OPEN_SOFT = "com.focuslock.app.SHOW_SOFT_LOCK";
     static final String SOFT_CHANNEL = "soft_lock_session";

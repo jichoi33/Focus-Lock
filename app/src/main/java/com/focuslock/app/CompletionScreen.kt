@@ -22,7 +22,7 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 
 @Composable
-internal fun CompletionScreen(modes: Int, onDone: () -> Unit) {
+internal fun CompletionScreen(modes: Int, description: String, onDone: () -> Unit) {
     val colors = MaterialTheme.colorScheme
     val modeLabel = when (modes) {
         SessionCompletion.HARD -> "Hard Lock complete"
@@ -48,6 +48,10 @@ internal fun CompletionScreen(modes: Int, onDone: () -> Unit) {
             Spacer(Modifier.height(6.dp))
             Text("Nicely done.", Modifier.semantics { heading() },
                 style = MaterialTheme.typography.headlineLarge, textAlign = TextAlign.Center)
+            if (description.isNotBlank()) {
+                Spacer(Modifier.height(8.dp))
+                Text(description, style = MaterialTheme.typography.bodyMedium, textAlign = TextAlign.Center)
+            }
             Spacer(Modifier.height(30.dp))
             PrimaryButton("Done", onDone)
         }
@@ -85,5 +89,5 @@ private fun CompletionMark() {
 @Preview(showBackground = true, widthDp = 390, heightDp = 740)
 @Composable
 private fun CompletionPreview() {
-    FocusTheme { CompletionScreen(SessionCompletion.HARD) {} }
+    FocusTheme { CompletionScreen(SessionCompletion.HARD, "Evening focus") {} }
 }

@@ -47,6 +47,36 @@ final class Rule {
         return repeatEndMinute() <= startMinute;
     }
 
+    Rule copy() {
+        Rule copy = new Rule();
+        copy.id = id;
+        copy.name = name;
+        copy.enabled = enabled;
+        copy.test = test;
+        copy.days = days;
+        copy.startMinute = startMinute;
+        copy.endMinute = endMinute;
+        copy.durationMinutes = durationMinutes;
+        copy.from = from;
+        copy.to = to;
+        copy.skippedThrough = skippedThrough;
+        copy.timer = timer;
+        return copy;
+    }
+
+    Rule withRepeatTimes(int days, int start, int end) {
+        Rule draft = copy();
+        if (start != startMinute || end != repeatEndMinute()) draft.durationMinutes = 0;
+        draft.days = days;
+        draft.startMinute = start;
+        draft.endMinute = end;
+        return draft;
+    }
+
+    boolean repeatsWithoutGap() {
+        return days == 127 && requestedDuration() == DAY;
+    }
+
     static class Window {
         final Rule rule;
         final long start;
@@ -71,6 +101,16 @@ final class Rule {
 
     static class State {
         final List<Window> active = new ArrayList<>();
+        final List<Window> upcoming = new ArrayList<>();
+        Window nextStart;
+
+        Window latestActive() {
+            Window latest = null;
+            for (Window window : active) {
+                if (latest == null || window.start > latest.start) latest = window;
+            }
+            return latest;
+        }
         long next = Long.MAX_VALUE;
         long nextWall = Long.MAX_VALUE;
         long nextElapsed = Long.MAX_VALUE;
@@ -90,6 +130,9 @@ final class Rule {
             if (window.start <= now) {
                 active.add(window);
                 boundary = window.end;
+            } else if (!window.rule.quick()) {
+                upcoming.add(window);
+                if (nextStart == null || window.start < nextStart.start) nextStart = window;
             }
             next = Math.min(next, boundary);
             nextWall = Math.min(nextWall, boundary);
@@ -118,7 +161,7 @@ final class Rule {
                 state.consider(new Window(rule, rule.from, rule.to), now);
                 continue;
             }
-            for (int offset = -1; offset <= 7; offset++) {
+            for (int offset = -2; offset <= 14; offset++) {
                 LocalDate day = today.plusDays(offset);
                 if ((rule.days & (1 << (day.getDayOfWeek().getValue() - 1))) == 0) continue;
                 long start = atMinute(day, rule.startMinute, zone);

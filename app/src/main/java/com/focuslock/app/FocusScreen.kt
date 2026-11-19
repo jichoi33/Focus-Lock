@@ -29,11 +29,11 @@ import kotlinx.coroutines.delay
 internal fun FocusWorkspace(activity: MainActivity) {
     val state = activity.snapshot ?: return
     val completed = activity.completedModes
-    val idle = state.hard.active.isEmpty() && !state.soft.active(SystemClock.elapsedRealtime())
-    val dialogOpen = activity.sheet != null || activity.schedule != null || activity.prompt != null
-    if (completed != 0 && idle && !dialogOpen) {
+    val hardActive = state.hard.active.isNotEmpty() && state.admin && state.secure
+    val dialogOpen = activity.sheet != null || activity.schedule != null || activity.prompt != null || activity.scheduleConfirmation != null
+    if (completed != 0 && !hardActive && !state.keyguardLocked && !dialogOpen) {
         BackHandler(onBack = activity::dismissCompletion)
-        CompletionScreen(completed, activity::dismissCompletion)
+        CompletionScreen(completed, activity.completionDescription, activity::dismissCompletion)
         return
     }
     val colors = MaterialTheme.colorScheme
@@ -152,8 +152,9 @@ private fun HardWorkspace(activity: MainActivity, state: FocusSnapshot) {
     }
 
     ScheduleHeading(activity::openNewSchedule)
-    if (state.hard.active.isEmpty() && state.hard.next != Long.MAX_VALUE) {
-        Caption("Next lock  ${dateLabel(state.hard.next)}")
+    val upcoming = state.hard.nextStart
+    if (state.hard.active.isEmpty() && upcoming != null) {
+        Caption("Next lock  ${windowLabel(upcoming)}")
     }
     val scheduled = state.rules.filterNot { it.quick() }
     if (scheduled.isEmpty()) {
