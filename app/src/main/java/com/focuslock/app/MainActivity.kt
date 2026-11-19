@@ -82,13 +82,11 @@ internal data class FocusSnapshot(
     val breaks: EmergencyBreaks
 )
 
+internal val repeatDayPresets = mapOf(127 to "Every day", 31 to "Weekdays", 96 to "Weekends")
 internal val focusDays = listOf("Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun")
-internal fun repeatingDaysLabel(mask: Int): String = when (mask) {
-    31 -> "Weekdays"
-    96 -> "Weekends"
-    127 -> "Every day"
-    else -> "Custom"
-}
+
+internal fun repeatingDaysLabel(mask: Int): String = repeatDayPresets[mask]
+    ?: focusDays.filterIndexed { index, _ -> mask and (1 shl index) != 0 }.joinToString(", ")
 
 internal fun durationLabel(total: Int): String = when {
     total < 60 -> "${total} min"
