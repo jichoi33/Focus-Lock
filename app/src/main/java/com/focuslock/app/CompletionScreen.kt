@@ -40,7 +40,12 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.util.lerp
 
-internal data class CompletedFocus(val name: String, val millis: Long)
+internal data class CompletedFocus(val mode: Int, val name: String, val millis: Long) {
+    val timeLabel: String?
+        get() = if (millis <= 0) null
+            else if (millis < Rule.MINUTE) "Less than 1 min focused"
+            else "${durationLabel((millis / Rule.MINUTE).toInt())} focused"
+}
 
 @Composable
 internal fun CompletionScreen(modes: Int, results: List<CompletedFocus>, onDone: () -> Unit) {
@@ -65,22 +70,29 @@ internal fun CompletionScreen(modes: Int, results: List<CompletedFocus>, onDone:
                 ) {
                     CompletionMark()
                     Spacer(Modifier.height(12.dp))
+                    val singleResult = results.singleOrNull()
+                    Text(singleResult?.timeLabel ?: "Nicely done.", Modifier.semantics { heading() },
+                        style = MaterialTheme.typography.headlineLarge, textAlign = TextAlign.Center)
+                    Spacer(Modifier.height(6.dp))
                     Text(modeLabel, style = MaterialTheme.typography.labelLarge, color = colors.primary,
                         textAlign = TextAlign.Center)
-                    Spacer(Modifier.height(6.dp))
-                    Text("Nicely done.", Modifier.semantics { heading() },
-                        style = MaterialTheme.typography.headlineLarge, textAlign = TextAlign.Center)
                     results.forEach { result ->
-                        if (result.name.isBlank() && result.millis <= 0L) return@forEach
-                        Spacer(Modifier.height(14.dp))
-                        if (result.name.isNotBlank()) {
-                            Text(result.name, style = MaterialTheme.typography.titleMedium, textAlign = TextAlign.Center)
-                        }
-                        if (result.millis > 0L) {
-                            val minutes = (result.millis / Rule.MINUTE).toInt()
-                            val focused = if (minutes == 0) "Less than 1 min focused" else "${durationLabel(minutes)} focused"
-                            Text(focused, style = MaterialTheme.typography.bodyMedium, textAlign = TextAlign.Center,
-                                color = colors.onSurfaceVariant)
+                        val name = result.name.takeUnless { it.isBlank() || (result.mode == SessionCompletion.HARD && it == "Hard Lock") }
+                        if (singleResult != null) {
+                            if (name != null) {
+                                Spacer(Modifier.height(12.dp))
+                                Text(name, style = MaterialTheme.typography.titleMedium, textAlign = TextAlign.Center)
+                            }
+                        } else if (result.timeLabel != null || name != null) {
+                            val mode = if (result.mode == SessionCompletion.HARD) "Hard Lock" else "Soft Lock"
+                            Spacer(Modifier.height(16.dp))
+                            Text(mode, style = MaterialTheme.typography.labelMedium, color = colors.primary)
+                            result.timeLabel?.let {
+                                Text(it, style = MaterialTheme.typography.titleLarge, textAlign = TextAlign.Center)
+                            }
+                            name?.let {
+                                Text(it, style = MaterialTheme.typography.bodyMedium, textAlign = TextAlign.Center)
+                            }
                         }
                     }
                 }
@@ -168,5 +180,5 @@ private fun celebrationPhase(time: Float, start: Float, end: Float): Float =
 @Preview(showBackground = true, widthDp = 390, heightDp = 740)
 @Composable
 private fun CompletionPreview() {
-    FocusTheme { CompletionScreen(SessionCompletion.HARD, listOf(CompletedFocus("Evening focus", 45 * Rule.MINUTE))) {} }
+    FocusTheme { CompletionScreen(SessionCompletion.HARD, listOf(CompletedFocus(SessionCompletion.HARD, "Evening focus", 45 * Rule.MINUTE))) {} }
 }

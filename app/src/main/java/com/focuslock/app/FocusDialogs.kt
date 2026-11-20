@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
@@ -22,6 +23,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.semantics
@@ -49,7 +51,24 @@ internal fun WorkspaceDialogs(activity: MainActivity, state: FocusSnapshot) {
                     if (hard) activity.quickDuration = value else activity.softDuration = value
                     close()
                 }
-            }) { DurationFields(value) { value = it } }
+            }) {
+                Column(Modifier.weight(1f, fill = false).verticalScroll(rememberScrollState()),
+                    verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    FlowRow(
+                        modifier = Modifier.selectableGroup(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        listOf(15, 30, 60).forEach { minutes ->
+                            FilterChip(
+                                selected = value.total == minutes,
+                                onClick = { value = DurationInput.of(minutes) },
+                                label = { Text(durationLabel(minutes)) }
+                            )
+                        }
+                    }
+                    DurationFields(value) { value = it }
+                }
+            }
         }
         "rules" -> FocusDialog("Soft Lock rules", close) {
             Column(Modifier.heightIn(max = dialogBodyHeight()).verticalScroll(rememberScrollState()),
@@ -156,7 +175,7 @@ internal fun WorkspaceDialogs(activity: MainActivity, state: FocusSnapshot) {
         var defer by remember(confirmation) { mutableStateOf(active != null && next != null) }
         val first = if (defer) next else active ?: next
         FocusDialog("Check your first lock", dismiss, { confirmation.apply(defer) }, "Save schedule") {
-            Column(Modifier.weight(1f, fill = false).heightIn(max = dialogBodyHeight()).verticalScroll(rememberScrollState()),
+            Column(Modifier.weight(1f, fill = false).fillMaxWidth().heightIn(max = dialogBodyHeight()).verticalScroll(rememberScrollState()),
                 verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 Caption("Check when the lock starts and when you can use your phone again.")
                 if (!confirmation.enabled) {
@@ -180,7 +199,7 @@ internal fun WorkspaceDialogs(activity: MainActivity, state: FocusSnapshot) {
                         !confirmation.enabled -> "Lock window if enabled"
                         else -> "Next occurrence"
                     }
-                    SchedulePreviewCard(activity, title, it, startsNow)
+                    SchedulePreviewCard(activity, title, it, startsNow, confirmation.enabled)
                 }
                 if (active != null && !defer && next != null) {
                     SchedulePreviewCard(activity, "Next occurrence", next)
@@ -434,7 +453,9 @@ private fun SitesDialog(
 private fun ScheduleDialog(activity: MainActivity, rule: Rule) {
     val repeating = rule.repeats()
     val close = activity::dismissSchedule
-    var name by remember { mutableStateOf(rule.name.orEmpty()) }
+    var name by remember { mutableStateOf(rule.name.orEmpty().takeUnless {
+        repeating && it == DEFAULT_REPEAT_NAME
+    }.orEmpty()) }
     var preset by remember { mutableStateOf(rule.days.takeIf { it in repeatDayPresets }) }
     var customDays by remember { mutableStateOf(rule.days.takeUnless { it in repeatDayPresets }) }
     val days = preset ?: customDays ?: rule.days
@@ -449,28 +470,23 @@ private fun ScheduleDialog(activity: MainActivity, rule: Rule) {
         if (repeating) activity.saveRepeatingSchedule(rule, name, days, startMinute, endMinute)
         else activity.saveOneTimeSchedule(rule, name, firstAt, duration)
     }, "Save schedule") {
-        Column(Modifier.fillMaxWidth().heightIn(max = dialogBodyHeight()).verticalScroll(rememberScrollState()),
-            verticalArrangement = Arrangement.spacedBy(12.dp)) {
-            OutlinedTextField(name, { name = it }, label = { Text("Schedule name") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+        Column(Modifier.weight(1f, fill = false).fillMaxWidth().heightIn(max = dialogBodyHeight())
+            .verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(12.dp)) {
             if (repeating) {
                 Text("Lock window", style = MaterialTheme.typography.titleMedium)
-                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    ScheduleTimeField("Starts at", activity.timeLabel(startMinute), Modifier.weight(1f)) { timeField = "Start time" }
-                    ScheduleTimeField("Ends at", activity.timeLabel(endMinute), Modifier.weight(1f)) { timeField = "End time" }
-                }
-                when {
-                    endMinute == startMinute -> Caption("Ends at the same time the next day.")
-                    endMinute < startMinute -> Caption("Ends the next day")
+                Row(Modifier.fillMaxWidth().height(IntrinsicSize.Min),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    val overnight = endMinute <= startMinute
+                    ScheduleTimeField("Starts at", activity.timeLabel(startMinute), Modifier.weight(1f).fillMaxHeight()) {
+                        timeField = "Start time"
+                    }
+                    ScheduleTimeField("Ends at", activity.timeLabel(endMinute), Modifier.weight(1f).fillMaxHeight(),
+                        nextDay = overnight) { timeField = "End time" }
                 }
                 Text("Starts on", style = MaterialTheme.typography.titleMedium)
-                FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    repeatDayPresets.forEach { (mask, label) ->
-                        FilterChip(selected = preset == mask, onClick = { preset = mask }, label = { Text(label) })
-                    }
-                    FilterChip(selected = preset == null, onClick = {
-                        if (customDays == null) customDays = days
-                        preset = null
-                    }, label = { Text("Custom") })
+                ScheduleDayPresets(preset) { selection ->
+                    if (selection == null && customDays == null) customDays = days
+                    preset = selection
                 }
                 if (preset == null) {
                     ScheduleDayPicker(days) { customDays = it }
@@ -486,6 +502,8 @@ private fun ScheduleDialog(activity: MainActivity, rule: Rule) {
                 }
                 DurationFields(duration) { duration = it }
             }
+            OutlinedTextField(name, { name = it }, label = { Text("Schedule name (optional)") },
+                singleLine = true, modifier = Modifier.fillMaxWidth())
             if (rule.name != null) {
                 TextButton(onClick = { activity.deleteSchedule(rule) }) {
                     Text("Delete schedule", color = MaterialTheme.colorScheme.error)
@@ -520,14 +538,36 @@ private fun ScheduleDialog(activity: MainActivity, rule: Rule) {
 }
 
 @Composable
+private fun ScheduleDayPresets(selected: Int?, onSelect: (Int?) -> Unit) {
+    val fontScale = LocalDensity.current.fontScale
+    val choices = repeatDayPresets.entries.map { (mask, label) -> mask to label } + (null to "Custom")
+    BoxWithConstraints(Modifier.fillMaxWidth()) {
+        val columns = if (maxWidth >= 232.dp && fontScale <= 1.3f) 2 else 1
+        Column(Modifier.selectableGroup(), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            choices.chunked(columns).forEach { row ->
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    row.forEach { (mask, label) ->
+                        FilterChip(
+                            selected = selected == mask,
+                            onClick = { onSelect(mask) },
+                            modifier = Modifier.weight(1f).heightIn(min = 48.dp).semantics { role = Role.RadioButton },
+                            label = { Text(label) }
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
 private fun ScheduleDayPicker(days: Int, onChange: (Int) -> Unit) {
     val colors = MaterialTheme.colorScheme
-    val density = androidx.compose.ui.platform.LocalDensity.current
-    val diameter = with(density) { 48.dp * fontScale.coerceAtLeast(1f) }
+    val diameter = 48.dp * LocalDensity.current.fontScale.coerceAtLeast(1f)
     BoxWithConstraints(Modifier.fillMaxWidth()) {
-        val gap = 6.dp
-        val perRow = if (maxWidth >= diameter * 7 + gap * 6) 7
-            else ((maxWidth + gap) / (diameter + gap)).toInt().coerceIn(1, 4)
+        val oneRow = maxWidth >= diameter * 7
+        val gap = if (oneRow) ((maxWidth - diameter * 7) / 6).coerceAtMost(6.dp) else 6.dp
+        val perRow = if (oneRow) 7 else ((maxWidth + gap) / (diameter + gap)).toInt().coerceIn(1, 4)
         Column(Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.spacedBy(gap)) {
             focusDays.indices.chunked(perRow).forEach { weekRow ->
@@ -553,35 +593,44 @@ private fun ScheduleDayPicker(days: Int, onChange: (Int) -> Unit) {
 }
 
 @Composable
-private fun SchedulePreviewCard(activity: MainActivity, title: String, preview: SchedulePreview, startsNow: Boolean = false) {
+private fun SchedulePreviewCard(activity: MainActivity, title: String, preview: SchedulePreview,
+                                startsNow: Boolean = false, enabled: Boolean = true) {
     val start = preview.window.start
     val end = preview.window.end
-    val startLabel = if (startsNow) "Now" else activity.dateLabel(start)
+    val startLabel = activity.dateLabel(start)
     val endLabel = ClockLabels.unlockTime(end, start, activity.use24Hour)
+    val unlockLabel = if (preview.release == 0L) "No unlock in the next 7 days"
+        else activity.dateLabel(preview.release)
     GroupCard {
-        Column(Modifier.fillMaxWidth().padding(14.dp), verticalArrangement = Arrangement.spacedBy(5.dp)) {
+        Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
             Caption(title)
-            Text("$startLabel to $endLabel", style = MaterialTheme.typography.titleMedium)
-            if (preview.release != end) {
-                HorizontalDivider()
-                val unlock = if (preview.release == 0L) "No unlock in the next 7 days"
-                    else "Phone unlocks at ${activity.dateLabel(preview.release)}"
-                Caption("Overlapping locks")
-                Text(unlock, style = MaterialTheme.typography.titleMedium,
-                    color = MaterialTheme.colorScheme.primary)
+            val release = when {
+                preview.release == 0L -> unlockLabel
+                enabled -> "Phone unlocks on $unlockLabel"
+                else -> "Would unlock on $unlockLabel"
+            }
+            Text(release,
+                style = MaterialTheme.typography.titleLarge, color = MaterialTheme.colorScheme.primary)
+            if (preview.release == end) {
+                Caption("Lock starts ${if (startsNow) "now" else startLabel}")
+            } else {
+                Caption("Schedule runs $startLabel to $endLabel.")
+                Caption("Overlapping locks keep your phone locked past this window.")
             }
         }
     }
 }
 
 @Composable
-private fun ScheduleTimeField(label: String, time: String, modifier: Modifier, onClick: () -> Unit) {
+private fun ScheduleTimeField(label: String, time: String, modifier: Modifier,
+                              nextDay: Boolean = false, onClick: () -> Unit) {
     val colors = MaterialTheme.colorScheme
     Surface(onClick = onClick, modifier = modifier, shape = RoundedCornerShape(16.dp),
         color = colors.primaryContainer, contentColor = colors.onPrimaryContainer) {
         Column(Modifier.padding(horizontal = 14.dp, vertical = 10.dp)) {
             Text(label, style = MaterialTheme.typography.labelMedium)
             Text(time, style = MaterialTheme.typography.titleLarge)
+            if (nextDay) Text("Next day", style = MaterialTheme.typography.labelMedium)
         }
     }
 }

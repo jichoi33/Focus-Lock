@@ -275,7 +275,9 @@ private fun ScheduleCard(activity: MainActivity, rule: Rule, active: Boolean,
                 if (rule.endsNextDay()) "$range (next day)" else range
             } else activity.dateLabel(rule.from)
             Text(time, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
-            Text(rule.name, style = MaterialTheme.typography.bodyMedium)
+            if (!rule.repeats() || rule.name != DEFAULT_REPEAT_NAME) {
+                Text(rule.name, style = MaterialTheme.typography.bodyMedium)
+            }
             Caption(if (rule.repeats()) repeatingDaysLabel(rule.days) else durationLabel(rule.requestedDuration()))
         }
         when {
@@ -331,12 +333,25 @@ private fun SoftWorkspace(activity: MainActivity, state: FocusSnapshot) {
         SessionCard(activity.softDuration, { activity.sheet = "duration" }, label,
             { if (empty) activity.sheet = "rules" else activity.startSoft() }) {
             HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
-            Row(Modifier.fillMaxWidth().clickable { activity.sheet = "rules" }.heightIn(min = 48.dp),
+            Row(Modifier.fillMaxWidth().clickable(onClickLabel = "Edit Soft Lock rules") { activity.sheet = "rules" }
+                .heightIn(min = 48.dp),
                 verticalAlignment = Alignment.CenterVertically) {
-                Column(Modifier.weight(1f)) {
-                    Text(if (activity.allowlist) "Allowlist" else "Blocklist", style = MaterialTheme.typography.titleMedium)
-                    Caption(if (empty) "Choose apps or websites" else if (activity.allowlist && count == 0) "Essential apps only"
-                        else if (activity.allowlist) quantity(count, "app") else quantity(count, "app") + ", " + quantity(activity.blockedSites.size, "site"))
+                Column(Modifier.weight(1f).padding(vertical = 6.dp), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                    val sites = activity.blockedSites.size
+                    val summary = when {
+                        empty -> "Choose apps or websites"
+                        activity.allowlist && count == 0 && activity.allowBrowserTabs -> "Essential apps"
+                        activity.allowlist && count == 0 -> "Essential apps only"
+                        activity.allowlist -> "${quantity(count, "app")} allowed"
+                        count == 0 -> "${quantity(sites, "site")} blocked"
+                        sites == 0 -> "${quantity(count, "app")} blocked"
+                        else -> "${quantity(count, "app")} and ${quantity(sites, "site")} blocked"
+                    }
+                    Text(summary, style = MaterialTheme.typography.titleMedium)
+                    if (activity.allowlist) {
+                        Caption(if (activity.allowBrowserTabs) "Supported in-app browser tabs allowed"
+                            else "In-app browser tabs follow app rules")
+                    }
                 }
                 Symbol("Chev", tint = MaterialTheme.colorScheme.outline)
             }

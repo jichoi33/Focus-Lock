@@ -82,6 +82,8 @@ internal data class FocusSnapshot(
     val breaks: EmergencyBreaks
 )
 
+internal const val DEFAULT_REPEAT_NAME = "Repeating lock"
+
 internal val repeatDayPresets = mapOf(127 to "Every day", 31 to "Weekdays", 96 to "Weekends")
 internal val focusDays = listOf("Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun")
 
@@ -318,7 +320,7 @@ class MainActivity : ComponentActivity() {
         completedModes = completionStore.pending()
         completionResults = listOf(SessionCompletion.HARD, SessionCompletion.SOFT)
             .filter { completedModes and it != 0 }
-            .map { CompletedFocus(completionStore.description(it), completionStore.protectedMillis(it)) }
+            .map { CompletedFocus(it, completionStore.description(it), completionStore.protectedMillis(it)) }
     }
 
     internal fun dismissCompletion() {
@@ -588,7 +590,7 @@ class MainActivity : ComponentActivity() {
     internal fun saveRepeatingSchedule(rule: Rule, name: String, days: Int, start: Int, end: Int) {
         if (days == 0) return notify("Choose at least one day.")
         val draft = rule.withRepeatTimes(days, start, end)
-        draft.name = name.trim().ifBlank { "Repeating lock" }
+        draft.name = name.trim().ifBlank { DEFAULT_REPEAT_NAME }
         applySchedule(draft, review = true)
     }
 
