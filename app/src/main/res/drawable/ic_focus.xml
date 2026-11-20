@@ -4,8 +4,8 @@
     <path
         android:pathData="M18,4h36a14,14 0,0 1,14 14v36a14,14 0,0 1,-14 14H18A14,14 0,0 1,4 54V18A14,14 0,0 1,18 4z">
         <aapt:attr name="android:fillColor">
-            <gradient android:startX="10" android:startY="4" android:endX="59" android:endY="70"
-                android:startColor="#368B78" android:centerColor="#176552" android:endColor="#163E48" />
+            <gradient android:startX="36" android:startY="4" android:endX="36" android:endY="68"
+                android:startColor="#43B9FF" android:centerColor="#1683F3" android:endColor="#1659CD" />
         </aapt:attr>
     </path>
     <path android:strokeColor="#FFFFFF" android:strokeWidth="3.1" android:strokeLineCap="round"
