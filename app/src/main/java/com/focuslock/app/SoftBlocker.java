@@ -9,6 +9,7 @@ import android.content.Intent;
 import android.content.res.Configuration;
 import android.content.SharedPreferences;
 import android.graphics.PixelFormat;
+import android.graphics.Rect;
 import android.graphics.Typeface;
 import android.graphics.drawable.GradientDrawable;
 import android.os.Handler;
@@ -44,6 +45,7 @@ public final class SoftBlocker extends AccessibilityService {
             "chrome-native://newtab", "chrome-native://newtab/", "edge://newtab", "edge://newtab/"));
     private static final int FIREFOX_SCAN_LIMIT = 96;
     private static final long IDLE_CHECK_MS = 1000;
+    private static final long NAVIGATION_SETTLE_MS = 250;
     // The service and activity access this state on the main thread.
     private static SoftBlocker connected;
     private static Runnable connectionListener;
@@ -72,7 +74,6 @@ public final class SoftBlocker extends AccessibilityService {
     private SoftStore.Session test;
     private Set<String> detectedBrowsers;
     private Set<String> essentials;
-    private Set<String> homeApps;
     private Set<String> settingsApps;
     private KeyguardManager keyguard;
     private WindowManager windows;
@@ -90,7 +91,7 @@ public final class SoftBlocker extends AccessibilityService {
         reportChange();
     }
 
-    private boolean goingHome;
+    private long navigationUntil;
     private boolean queued;
 
     static boolean enabled(Context context) {
@@ -163,7 +164,6 @@ public final class SoftBlocker extends AccessibilityService {
         session = test == null ? store.read() : test;
         sessionKey = store.sessionId();
         essentials = AppCatalog.essentials(this);
-        homeApps = AppCatalog.homeApps(getPackageManager());
         settingsApps = AppCatalog.settingsApps(getPackageManager());
         boolean inspectBrowsers = session.allowlist ? session.allowBrowserTabs : !session.sites.isEmpty();
         detectedBrowsers = inspectBrowsers ? AppCatalog.browsers(this) : java.util.Collections.emptySet();
@@ -236,6 +236,7 @@ public final class SoftBlocker extends AccessibilityService {
 
         long delay = IDLE_CHECK_MS;
         if (keyguard.isKeyguardLocked()) hideCover();
+        else if (navigationUntil > now) delay = navigationUntil - now;
         else delay = checkForeground(now, softActive && !paused, hardActive || (paused && softActive));
         if (paused) delay = Math.min(delay, breakUntil - now);
         if (softActive) delay = Math.min(delay, session.timer.elapsedEnd - now);
@@ -247,14 +248,13 @@ public final class SoftBlocker extends AccessibilityService {
         AccessibilityNodeInfo root = foregroundRoot();
         if (root == null) {
             navigation.reset();
-            release.reset();
-            return IDLE_CHECK_MS;
+            return recheckUnknownCover(now);
         }
         try {
             CharSequence packageName = root.getPackageName();
             if (packageName == null || packageName.length() == 0) {
-                release.reset();
-                return IDLE_CHECK_MS;
+                navigation.reset();
+                return recheckUnknownCover(now);
             }
             String id = packageName.toString();
             int windowId = root.getWindowId();
@@ -275,16 +275,13 @@ public final class SoftBlocker extends AccessibilityService {
                     // Text typed in the address bar is neither a page nor a strict-mode failure.
                     navigation.reset();
                 } else if (address == Address.UNKNOWN) {
-                    if (alreadyCovered) {
-                        release.reset();
-                        return IDLE_CHECK_MS;
-                    }
                     if (BlockRules.blockUnreadableBrowser(id, session.blockUnverifiable)) {
                         long wait = navigation.unreadableDelay(id, windowId, now);
-                        if (wait > 0) return Math.min(wait, IDLE_CHECK_MS);
+                        if (wait > 0 && !alreadyCovered) return Math.min(wait, IDLE_CHECK_MS);
                         reason = "Focus Lock cannot read this browser's address bar.";
                     } else {
                         navigation.reset();
+                        if (alreadyCovered) return recheckUnknownCover(now);
                     }
                 } else if (!address.domain.isEmpty() && BlockRules.matches(address.domain, session.sites)) {
                     long wait = navigation.blockedHostDelay(id, windowId, address.domain, now);
@@ -297,21 +294,23 @@ public final class SoftBlocker extends AccessibilityService {
                 navigation.reset();
             }
             if (reason != null) {
-                showCover(windowId, reason, site);
-                boolean returnHome = (settingsBlocked && hardActive) || (softActive && session.returnHome);
-                if (!site && returnHome && cover != null) {
-                    long remaining = appReturn.remaining(id, SystemClock.elapsedRealtime());
+                boolean autoReturn = !site && ((settingsBlocked && hardActive) || (softActive && session.returnHome));
+                if (!autoReturn) appReturn.reset();
+                long remaining = autoReturn ? appReturn.remaining(id, now) : Long.MAX_VALUE;
+                showCover(windowId, reason, site, remaining != Long.MAX_VALUE);
+                if (cover != null && remaining != Long.MAX_VALUE) {
                     if (remaining > 0) return Math.min(remaining, IDLE_CHECK_MS);
                     long current = SystemClock.elapsedRealtime();
-                    if ((session.active(current) || (settingsBlocked && current < FocusService.settingsBlockedUntil))
-                            && !keyguard.isKeyguardLocked()) {
-                        if (requestHome()) return CoverRelease.CONFIRM_MS;
+                    if ((!session.active(current) && !(settingsBlocked && current < FocusService.settingsBlockedUntil))
+                            || keyguard.isKeyguardLocked()) return 1L;
+                    if (returnHome()) {
+                        navigationUntil = current + NAVIGATION_SETTLE_MS;
+                        return NAVIGATION_SETTLE_MS;
                     }
-                } else {
-                    appReturn.reset();
+                    cover.updateMessage(reason, site, false);
                 }
-            } else if (cover != null) {
-                if (!release.confirmed(windowId, now)) return CoverRelease.CONFIRM_MS;
+            } else {
+                if (cover != null && !release.confirmed(windowId, now)) return CoverRelease.CONFIRM_MS;
                 hideCover();
             }
             return IDLE_CHECK_MS;
@@ -320,39 +319,43 @@ public final class SoftBlocker extends AccessibilityService {
         }
     }
 
+    private long recheckUnknownCover(long now) {
+        if (cover == null) return IDLE_CHECK_MS;
+        // A full-screen overlay can prevent Android from exposing the app below it.
+        // Give transitions time to settle, then detach it and query the foreground again.
+        if (release.shouldRecheckWithoutCover(now)) detachCover();
+        return CoverRelease.CONFIRM_MS;
+    }
+
     private AccessibilityNodeInfo foregroundRoot() {
         List<AccessibilityWindowInfo> visible = getWindows();
         try {
+            AccessibilityWindowInfo focused = null;
             AccessibilityWindowInfo active = null;
             AccessibilityWindowInfo covered = null;
-            AccessibilityWindowInfo topApp = null;
+            AccessibilityWindowInfo top = null;
             for (AccessibilityWindowInfo window : visible) {
                 if (window.getType() != AccessibilityWindowInfo.TYPE_APPLICATION) continue;
-                if (topApp == null) topApp = window;
-                if (window.isFocused()) {
-                    AccessibilityNodeInfo root = window.getRoot();
-                    if (root != null) return root;
-                }
-                if (window.getId() == coveredWindowId) covered = window;
+                if (top == null) top = window;
+                if (focused == null && window.isFocused()) focused = window;
                 if (active == null && window.isActive()) active = window;
+                if (window.getId() == coveredWindowId) covered = window;
             }
-            // A focusable accessibility overlay can become the active window itself.
-            // Keep inspecting the underlying app while the overlay owns input focus.
-            if (cover != null) {
-                // Home can be visible underneath the cover before it receives input focus.
-                if (goingHome && topApp != null && topApp != covered) {
-                    AccessibilityNodeInfo home = topApp.getRoot();
-                    if (home != null) {
-                        if (homeApps.contains(String.valueOf(home.getPackageName()))) return home;
-                        home.recycle();
-                    }
-                }
-                return covered == null ? null : covered.getRoot();
+            if (focused != null && focused != covered) {
+                AccessibilityNodeInfo root = focused.getRoot();
+                if (root != null) return root;
             }
-            if (active != null) {
+            if (active != null && active != covered && active != focused) {
                 AccessibilityNodeInfo root = active.getRoot();
                 if (root != null) return root;
             }
+            // The cover can leave the old app with stale focus flags. A newly
+            // visible app above it takes precedence if it covers the old app.
+            if (cover != null && top != null && top != covered
+                    && (covered == null || obscures(top, covered))) {
+                return top.getRoot();
+            }
+            if (covered != null) return covered.getRoot();
         } finally {
             for (AccessibilityWindowInfo window : visible) window.recycle();
         }
@@ -364,6 +367,17 @@ public final class SoftBlocker extends AccessibilityService {
         if (application) return root;
         root.recycle();
         return null;
+    }
+
+    private static boolean obscures(AccessibilityWindowInfo upper, AccessibilityWindowInfo lower) {
+        Rect intersection = new Rect();
+        Rect original = new Rect();
+        upper.getBoundsInScreen(intersection);
+        lower.getBoundsInScreen(original);
+        if (!intersection.intersect(original)) return false;
+        long overlap = (long) intersection.width() * intersection.height();
+        long area = (long) original.width() * original.height();
+        return overlap * 10 >= area * 9;
     }
 
     private boolean browser(String id) {
@@ -465,15 +479,14 @@ public final class SoftBlocker extends AccessibilityService {
         return domain.isEmpty() ? Address.UNKNOWN : new Address(domain);
     }
 
-    private void showCover(int windowId, String text, boolean browser) {
+    private void showCover(int windowId, String text, boolean browser, boolean returning) {
         release.reset();
         if (cover != null) {
-            if (coveredWindowId != windowId) goingHome = false;
             coveredWindowId = windowId;
-            cover.updateMessage(text, browser);
+            cover.updateMessage(text, browser, returning);
             return;
         }
-        BlockCover layout = new BlockCover(text, browser);
+        BlockCover layout = new BlockCover(text, browser, returning);
         WindowManager.LayoutParams params = new WindowManager.LayoutParams(
                 WindowManager.LayoutParams.MATCH_PARENT, WindowManager.LayoutParams.MATCH_PARENT,
                 WindowManager.LayoutParams.TYPE_ACCESSIBILITY_OVERLAY,
@@ -491,23 +504,33 @@ public final class SoftBlocker extends AccessibilityService {
     }
 
     private void leaveCover(int action) {
-        boolean sent;
         if (action == GLOBAL_ACTION_HOME) {
-            sent = requestHome();
+            scheduleCoverCheck(returnHome() ? NAVIGATION_SETTLE_MS : 0);
         } else {
-            hideCover();
-            sent = performGlobalAction(action);
+            // Back must reach the browser. The focusable cover consumes it otherwise.
+            detachCover();
+            scheduleCoverCheck(performGlobalAction(action) ? NAVIGATION_SETTLE_MS : 0);
         }
-        handler.removeCallbacks(update);
-        queued = true;
-        handler.postDelayed(update, sent ? 120L : 0L);
     }
 
-    private boolean requestHome() {
+    private boolean returnHome() {
         appReturn.markAttempted();
-        boolean sent = performGlobalAction(GLOBAL_ACTION_HOME);
-        goingHome |= sent;
-        return sent;
+        if (!performGlobalAction(GLOBAL_ACTION_HOME)) return false;
+        detachCover();
+        return true;
+    }
+
+    private void openEmergencyBreak() {
+        startActivity(LockNotifications.openSoftBreak(this).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK));
+        detachCover();
+        scheduleCoverCheck(NAVIGATION_SETTLE_MS);
+    }
+
+    private void scheduleCoverCheck(long delay) {
+        navigationUntil = SystemClock.elapsedRealtime() + delay;
+        handler.removeCallbacks(update);
+        queued = true;
+        handler.postDelayed(update, delay);
     }
 
     @Override public void onConfigurationChanged(Configuration configuration) {
@@ -516,13 +539,17 @@ public final class SoftBlocker extends AccessibilityService {
     }
 
     private void hideCover() {
-        release.reset();
         appReturn.reset();
-        goingHome = false;
-        if (cover == null) return;
-        windows.removeViewImmediate(cover);
+        navigationUntil = 0L;
+        detachCover();
+    }
+
+    private void detachCover() {
+        release.reset();
+        BlockCover visible = cover;
         cover = null;
         coveredWindowId = -1;
+        if (visible != null) windows.removeViewImmediate(visible);
     }
 
     @Override public void onInterrupt() {
@@ -563,7 +590,7 @@ public final class SoftBlocker extends AccessibilityService {
         private final Button stopTest;
         private final Button emergency;
 
-        BlockCover(String message, boolean showPrevious) {
+        BlockCover(String message, boolean showPrevious, boolean returning) {
             super(SoftBlocker.this);
             setFocusableInTouchMode(true);
             setOrientation(VERTICAL);
@@ -593,19 +620,16 @@ public final class SoftBlocker extends AccessibilityService {
             previous = addButton("Previous page", () -> leaveCover(GLOBAL_ACTION_BACK));
             home = addButton("Go Home", () -> leaveCover(GLOBAL_ACTION_HOME));
             stopTest = addButton("End test", SoftBlocker::endTest);
-            emergency = addButton("Emergency break", () ->
-                    startActivity(LockNotifications.openSoftBreak(SoftBlocker.this)
-                            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)));
-            updateMessage(message, showPrevious);
+            emergency = addButton("Emergency break", SoftBlocker.this::openEmergencyBreak);
+            updateMessage(message, showPrevious, returning);
             updateAppearance(getResources().getConfiguration());
         }
 
-        void updateMessage(String message, boolean showPrevious) {
+        void updateMessage(String message, boolean showPrevious, boolean returning) {
             boolean testing = session.test && session.active(SystemClock.elapsedRealtime());
-            boolean returning = !showPrevious && session.returnHome && !testing;
             String title = testing ? "Soft Lock test" : showPrevious ? "Website blocked" : "App blocked";
             if (returning) message += " Returning to Home…";
-            home.setVisibility(returning ? GONE : VISIBLE);
+
             boolean canBreak = !returning && !testing && breakAvailable && session.active(SystemClock.elapsedRealtime());
             emergency.setVisibility(canBreak ? VISIBLE : GONE);
             if (!title.contentEquals(heading.getText())) heading.setText(title);

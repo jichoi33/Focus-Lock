@@ -69,6 +69,14 @@ public final class BlockRulesTest {
         check(!release.confirmed(43, 1200), "another window needs its own confirmation");
         check(release.confirmed(43, 1300), "stable allowed window can dismiss the cover");
 
+        check(!release.shouldRecheckWithoutCover(1400), "a missing foreground root can be transient");
+        check(!release.shouldRecheckWithoutCover(1999), "keep the cover during the recovery grace period");
+        check(release.shouldRecheckWithoutCover(2000), "a persistently missing root triggers a fresh check without the cover");
+        release.reset();
+        check(!release.shouldRecheckWithoutCover(2100), "a fresh cover has a fresh recovery period");
+        check(!release.confirmed(43, 2150), "an unknown window interrupts allowed-window confirmation");
+        check(!release.shouldRecheckWithoutCover(2700), "an allowed observation ends the unknown-window streak");
+
         AppReturn appReturn = new AppReturn();
         check(appReturn.remaining("blocked.one", 2000) == 900, "show the notice before going home");
         check(appReturn.remaining("blocked.one", 2500) == 400, "rechecks do not restart the notice");
