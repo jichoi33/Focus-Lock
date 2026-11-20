@@ -13,6 +13,7 @@ final class LockNotifications {
     static final String RULE_ID = "rule_id";
     static final String OPEN_HARD = "com.focuslock.app.SHOW_HARD_LOCK";
     static final String OPEN_SOFT = "com.focuslock.app.SHOW_SOFT_LOCK";
+    static final String OPEN_SOFT_BREAK = "com.focuslock.app.SHOW_SOFT_BREAK";
     static final String SOFT_CHANNEL = "soft_lock_session";
     private static final int SOFT_ID = 83;
     private static final int HARD_PREVIEW_ID = 85;
@@ -39,6 +40,11 @@ final class LockNotifications {
                 new Intent(context, MainActivity.class).setAction(soft ? OPEN_SOFT : OPEN_HARD)
                         .addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP | Intent.FLAG_ACTIVITY_SINGLE_TOP),
                 PendingIntent.FLAG_IMMUTABLE | PendingIntent.FLAG_UPDATE_CURRENT);
+    }
+
+    static Intent openSoftBreak(Context context) {
+        return new Intent(context, MainActivity.class).setAction(OPEN_SOFT_BREAK)
+                .addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP | Intent.FLAG_ACTIVITY_SINGLE_TOP);
     }
 
     static boolean available(Context context, boolean soft) {
@@ -107,8 +113,15 @@ final class LockNotifications {
         if (!available(context, true)) return;
         boolean paused = !session.test && breakUntil > SystemClock.elapsedRealtime();
         long countdown = paused ? Math.min(remaining, breakUntil - SystemClock.elapsedRealtime()) : remaining;
-        manager.notify(SOFT_ID, timer(context, SOFT_CHANNEL, session.test ? "Soft Lock test" : paused ? "Emergency break" : "Soft Lock",
-                System.currentTimeMillis() + countdown, true).setTimeoutAfter(remaining).build());
+        Notification.Builder notification = timer(context, SOFT_CHANNEL,
+                session.test ? "Soft Lock test" : paused ? "Emergency break" : "Soft Lock",
+                System.currentTimeMillis() + countdown, true).setTimeoutAfter(remaining);
+        if (!session.test && !paused && EmergencyBreaks.current(context).available(SystemClock.elapsedRealtime())) {
+            PendingIntent emergency = PendingIntent.getActivity(context, 24, openSoftBreak(context),
+                    PendingIntent.FLAG_IMMUTABLE | PendingIntent.FLAG_UPDATE_CURRENT);
+            notification.addAction(new Notification.Action.Builder(null, "Emergency break", emergency).build());
+        }
+        manager.notify(SOFT_ID, notification.build());
     }
 
     static void showCompletion(Context context, int modes) {

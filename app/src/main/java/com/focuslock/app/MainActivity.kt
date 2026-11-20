@@ -23,6 +23,7 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.core.os.bundleOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -48,7 +49,10 @@ internal data class DurationInput(val hours: String = "0", val minutes: String =
     }
 }
 
-internal data class Prompt(val title: String, val text: String, val action: String, val confirm: () -> Unit)
+internal data class Prompt(
+    val title: String, val text: String, val action: String,
+    val cancel: () -> Unit = {}, val confirm: () -> Unit
+)
 
 internal data class SchedulePreview(val window: Rule.Window, val release: Long) {
     fun matches(other: SchedulePreview?) =
@@ -63,6 +67,19 @@ internal data class ScheduleConfirmation(
     val next: SchedulePreview?,
     val apply: (Boolean) -> Unit
 )
+
+internal data class HardStartReview(
+    val minutes: Int,
+    val unlock: String?,
+    val extension: String?,
+    val breakInfo: String,
+    val notificationInfo: String?,
+    val updated: Boolean,
+    val confirm: () -> Unit
+) {
+    val action: String
+        get() = if (unlock != null) "Lock until $unlock" else "Lock phone"
+}
 
 internal data class FocusSnapshot(
     val rules: List<Rule>,
@@ -108,7 +125,10 @@ class MainActivity : ComponentActivity() {
     }
     private val handler = Handler(Looper.getMainLooper())
     private val updateBoundary = Runnable { update() }
-    private val blockingChanged = Runnable { update() }
+    private val blockingChanged = Runnable {
+        update()
+        if (SoftBlocker.isConnected()) resumeSetup()
+    }
     private val hardChanged = SharedPreferences.OnSharedPreferenceChangeListener { _, _ -> update() }
     private val softChanged = SharedPreferences.OnSharedPreferenceChangeListener { _, key ->
         if (key == "end_elapsed") update()
@@ -150,6 +170,13 @@ class MainActivity : ComponentActivity() {
     internal var blockedApps by mutableStateOf(emptySet<String>())
     internal var allowedApps by mutableStateOf(emptySet<String>())
     internal var blockedSites by mutableStateOf(emptySet<String>())
+    private enum class SetupAction { Hard, HardTest, Soft, SoftTest, Schedule }
+    private enum class SetupPermission { ScreenLock, Admin, Alarms, Accessibility }
+
+    private var setupAction: SetupAction? = null
+    private var setupPermission: SetupPermission? = null
+    private var scheduleForReview: Rule? = null
+    internal var hardStartReview by mutableStateOf<HardStartReview?>(null)
     internal var scheduleConfirmation by mutableStateOf<ScheduleConfirmation?>(null)
     internal var prompt by mutableStateOf<Prompt?>(null)
     internal var schedule by mutableStateOf<Rule?>(null)
@@ -190,9 +217,14 @@ class MainActivity : ComponentActivity() {
         val returnHomeDefault = softStore.returnHomeByDefault()
         returnHomeOnBlock = savedInstanceState?.getBoolean("return_home", returnHomeDefault) ?: returnHomeDefault
         allowlist = savedInstanceState?.getBoolean("allowlist") ?: session.allowlist
+        schedule = savedInstanceState?.getBundle("schedule_editor")?.readSchedule()
+        scheduleForReview = savedInstanceState?.getBundle("schedule_review")?.readSchedule()
+        setupAction = savedInstanceState?.getString("setup_action")?.let(SetupAction::valueOf)
+        setupPermission = savedInstanceState?.getString("setup_permission")?.let(SetupPermission::valueOf)
         styleSystemBars(resources.configuration)
         update()
         openReminderSchedule(intent)
+        if (savedInstanceState == null) openSoftBreak(intent)
         setContent { FocusTheme { FocusWorkspace(this) } }
     }
 
@@ -214,6 +246,12 @@ class MainActivity : ComponentActivity() {
         intent.lockMode()?.let { mode = it }
         update()
         openReminderSchedule(intent)
+        openSoftBreak(intent)
+    }
+
+    private fun openSoftBreak(intent: Intent) {
+        if (intent.action != LockNotifications.OPEN_SOFT_BREAK) return
+        if (snapshot?.soft?.let { !it.test && it.active(SystemClock.elapsedRealtime()) } == true) offerBreak()
     }
 
     private fun openReminderSchedule(intent: Intent) {
@@ -226,7 +264,7 @@ class MainActivity : ComponentActivity() {
 
     private fun Intent?.lockMode(): FocusMode? = when (this?.action) {
         LockNotifications.OPEN_HARD, LockNotifications.OPEN_SCHEDULE -> FocusMode.Hard
-        LockNotifications.OPEN_SOFT -> FocusMode.Soft
+        LockNotifications.OPEN_SOFT, LockNotifications.OPEN_SOFT_BREAK -> FocusMode.Soft
         else -> null
     }
 
@@ -236,6 +274,26 @@ class MainActivity : ComponentActivity() {
             hours = this?.getString("${prefix}_hours") ?: defaults.hours,
             minutes = this?.getString("${prefix}_minutes") ?: defaults.minutes
         )
+    }
+
+    private fun Rule.saveSchedule() = bundleOf(
+        "id" to id, "name" to name, "enabled" to enabled, "days" to days,
+        "start" to startMinute, "end" to endMinute, "duration" to durationMinutes,
+        "from" to from, "to" to to, "skipped" to skippedThrough
+    )
+
+    private fun Bundle.readSchedule() = Rule().apply {
+        val data = this@readSchedule
+        id = requireNotNull(data.getString("id"))
+        name = data.getString("name")
+        enabled = data.getBoolean("enabled")
+        days = data.getInt("days")
+        startMinute = data.getInt("start")
+        endMinute = data.getInt("end")
+        durationMinutes = data.getInt("duration")
+        from = data.getLong("from")
+        to = data.getLong("to")
+        skippedThrough = data.getLong("skipped")
     }
 
     override fun onSaveInstanceState(outState: Bundle) {
@@ -251,6 +309,10 @@ class MainActivity : ComponentActivity() {
         outState.putStringArrayList("soft_apps", ArrayList(blockedApps))
         outState.putStringArrayList("allowed_apps", ArrayList(allowedApps))
         outState.putStringArrayList("soft_sites", ArrayList(blockedSites))
+        outState.putBundle("schedule_editor", schedule?.saveSchedule())
+        outState.putBundle("schedule_review", scheduleForReview?.saveSchedule())
+        outState.putString("setup_action", setupAction?.name)
+        outState.putString("setup_permission", setupPermission?.name)
         super.onSaveInstanceState(outState)
     }
 
@@ -275,6 +337,10 @@ class MainActivity : ComponentActivity() {
         FocusService.enforcementChanged = blockingChanged
         refreshHard()
         refreshSoftNotification()
+        if (setupPermission != null) resumeSetup()
+        else if (scheduleConfirmation == null && prompt == null) {
+            scheduleForReview?.let { applySchedule(it, review = true) }
+        }
     }
 
     override fun onPause() {
@@ -412,20 +478,64 @@ class MainActivity : ComponentActivity() {
         }
     }
 
-    private fun requireHard(exact: Boolean = false): Boolean {
+    private fun setupPrompt(
+        action: SetupAction, permission: SetupPermission,
+        title: String, message: String, button: String = "Open settings", open: () -> Unit
+    ) {
+        prompt = Prompt(title, message, button, cancel = {
+            if (action == SetupAction.Schedule) dismissScheduleReview()
+        }) {
+            setupAction = action
+            setupPermission = permission
+            open()
+        }
+    }
+
+    private fun resumeSetup() {
+        val action = setupAction ?: return
+        val current = snapshot ?: return
+        val granted = when (setupPermission) {
+            SetupPermission.ScreenLock -> current.secure
+            SetupPermission.Admin -> current.admin
+            SetupPermission.Alarms -> current.alarms
+            SetupPermission.Accessibility -> {
+                // Android may connect the enabled service shortly after the activity resumes.
+                if (current.accessibility && !current.blockingConnected) return
+                current.blockingConnected
+            }
+            null -> return
+        }
+        setupPermission = null
+        setupAction = null
+        if (!granted) {
+            if (action == SetupAction.Schedule) dismissScheduleReview()
+            return
+        }
+        when (action) {
+            SetupAction.Hard, SetupAction.HardTest -> startHard(action == SetupAction.HardTest)
+            SetupAction.Soft, SetupAction.SoftTest -> startSoft(action == SetupAction.SoftTest)
+            SetupAction.Schedule -> scheduleForReview?.let { applySchedule(it, review = true) }
+        }
+    }
+
+    private fun requireHard(action: SetupAction): Boolean {
         val current = snapshot ?: return false
         if (!current.secure) {
-            prompt = Prompt("Set up screen lock", "Set an Android PIN, pattern, or password first.", "Open settings") {
+            setupPrompt(action, SetupPermission.ScreenLock, "Set up screen lock",
+                "Set an Android PIN, pattern, or password so Focus Lock can lock the screen.") {
                 openSettings(Settings.ACTION_SECURITY_SETTINGS)
             }
             return false
         }
         if (!current.admin) {
-            enableAdmin()
+            setupPrompt(action, SetupPermission.Admin, "Allow screen locking",
+                "Allow Focus Lock to activate the Android lock screen during a Hard Lock session.",
+                "Continue", ::enableAdmin)
             return false
         }
-        if (exact && !current.alarms) {
-            prompt = Prompt("Scheduled lock permission", "Allow Alarms & reminders to start locks at the scheduled time.", "Open settings") {
+        if (action == SetupAction.Schedule && !current.alarms) {
+            setupPrompt(action, SetupPermission.Alarms, "Allow scheduled starts",
+                "Allow Alarms & reminders so Focus Lock can start your schedule on time.") {
                 openSettings(Settings.ACTION_REQUEST_SCHEDULE_EXACT_ALARM, true)
             }
             return false
@@ -444,39 +554,75 @@ class MainActivity : ComponentActivity() {
     internal fun startHard(test: Boolean = false) {
         val minutes = if (test) 1 else quickDuration.total ?: return invalidDuration()
         update()
-        if (!requireHard()) return
+        if (!requireHard(if (test) SetupAction.HardTest else SetupAction.Hard)) return
         val current = snapshot ?: return
         if (current.hard.active.isNotEmpty()) return
-        if (test && current.hard.next - System.currentTimeMillis() <= Rule.MINUTE) {
-            notify("A scheduled Hard Lock is about to start.")
+        if (test) {
+            if (current.hard.next - System.currentTimeMillis() <= Rule.MINUTE) {
+                notify("A scheduled Hard Lock is about to start.")
+                return
+            }
+            val controls = if (current.hardLockScreen) "Expand the lock screen notification and tap End test to finish early."
+                else "Lock screen notifications are off. The test ends automatically after one minute."
+            prompt = Prompt("Ready for your 1-minute test", "Your phone will lock for one minute. $controls", "Start test") {
+                beginHard(minutes, test = true)
+            }
+        } else reviewHardStart(minutes)
+    }
+
+    private fun reviewHardStart(minutes: Int, updated: Boolean = false) {
+        val current = snapshot ?: return
+        val clock = SessionClock(this)
+        val planned = clock.start(minutes * Rule.MINUTE)
+        val release = releaseAfter(current.hard, planned.wallEnd, clock.wall)
+        val unlock = release.end.takeIf { it > 0L }?.let { ClockLabels.unlockTime(it, clock.wall, use24Hour) }
+        val extension = release.extension?.let {
+            val name = it.rule.name.orEmpty().ifBlank { "A scheduled lock" }
+            "$name extends this lock."
+        }
+        val breaks = current.breaks
+        val breakInfo = if (breaks.enabled) {
+            val uses = if (breaks.remaining() == 1) "1 break" else "${breaks.remaining()} breaks"
+            "$uses available, up to ${breaks.minutes} min each"
+        } else "Emergency breaks are off"
+        val notificationInfo = when {
+            breaks.enabled && !current.hardLockScreen -> "Lock screen notifications are off. Turn them on to access break controls."
+            breaks.enabled -> "Expand the Hard Lock notification on the lock screen to take a break."
+            else -> null
+        }
+        hardStartReview = HardStartReview(minutes, unlock, extension, breakInfo, notificationInfo, updated) {
+            beginHard(minutes, test = false, reviewed = release)
+        }
+    }
+
+    private fun beginHard(minutes: Int, test: Boolean, reviewed: Rule.Release? = null) {
+        update()
+        if (!requireHard(if (test) SetupAction.HardTest else SetupAction.Hard)) return
+        val clock = SessionClock(this)
+        val latest = hardStore.state(clock)
+        if (latest.active.isNotEmpty() || (test && latest.next - clock.wall <= Rule.MINUTE)) {
+            notify("A Hard Lock is already active or about to start.")
             return
         }
-        val notice = if (current.hardLockScreen) "" else
-            "\n\nLock screen notifications are off. To see controls, enable Focus Lock notifications and show notifications on the Android lock screen."
-        val now = System.currentTimeMillis()
-        val unlock = if (test) "" else
-            "\n" + unlockLabel(releaseAfter(current.hard, now + minutes * Rule.MINUTE, now), now) + "."
-        val details = when {
-            test -> "Your phone will lock for one minute. Wake the screen and expand the Hard Lock test notification to check the controls. Tap End test to finish early."
-            current.breaks.enabled -> "Your phone will lock for ${durationLabel(minutes)}. Wake the screen and expand the Hard Lock notification to take an emergency break."
-            else -> "Your phone will lock for ${durationLabel(minutes)}."
+        val timer = clock.start(minutes * Rule.MINUTE)
+        if (reviewed != null) {
+            val release = releaseAfter(latest, timer.wallEnd, clock.wall)
+            if (release.end / Rule.MINUTE != reviewed.end / Rule.MINUTE ||
+                release.extension?.key() != reviewed.extension?.key()) {
+                reviewHardStart(minutes, updated = true)
+                return
+            }
         }
-        prompt = Prompt(if (test) "Test Hard Lock?" else "Start Hard Lock?",
-            details + unlock + notice, if (test) "Start test" else "Lock") {
-            val clock = SessionClock(this)
-            val latest = hardStore.state(clock)
-            if (latest.active.isEmpty() && (!test || latest.next - clock.wall > Rule.MINUTE)) {
-                val rule = Rule()
-                rule.id = Rule.QUICK_ID
-                rule.name = if (test) "Hard Lock test" else "Lock now"
-                rule.test = test
-                rule.timer = clock.start(minutes * Rule.MINUTE)
-                rule.from = clock.wall
-                rule.to = rule.timer.wallEnd
-                hardStore.put(rule)
-                refreshHard()
-            } else notify("A Hard Lock is already active or about to start.")
+        val rule = Rule().apply {
+            id = Rule.QUICK_ID
+            name = if (test) "Hard Lock test" else "Lock now"
+            this.test = test
+            this.timer = timer
+            from = clock.wall
+            to = timer.wallEnd
         }
+        hardStore.put(rule)
+        refreshHard()
     }
 
     internal fun startSoft(test: Boolean = false) {
@@ -486,7 +632,7 @@ class MainActivity : ComponentActivity() {
             notify("Add at least one app or website to block.")
             return
         }
-        if (!requireSoftConnection()) return
+        if (!requireSoftConnection(test)) return
         val summary = when {
             !allowlist -> "Your selected apps and websites will be blocked."
             apps.isEmpty() -> "Only essential features, including Home and Phone, will be available."
@@ -500,10 +646,12 @@ class MainActivity : ComponentActivity() {
         val notice = if (LockNotifications.available(this, true)) "" else
             "\nEnable Soft Lock notifications to see the countdown outside Focus Lock."
         val session = if (test) "1-minute test. You can end it at any time." else "${durationLabel(minutes)} session."
-        prompt = Prompt(if (test) "Test Soft Lock?" else "Start Soft Lock?",
-            "$session\n$summary\nAndroid Settings will be blocked.$notice",
-            "Start") {
-            if (requireSoftConnection() && SoftBlocker.activeTest() == null &&
+        val breakInfo = if (test) "" else if (EmergencyBreaks.current(this).enabled)
+            "\nFor urgent use, open Focus Lock and tap Emergency break." else "\nEmergency breaks are off."
+        prompt = Prompt(if (test) "Ready for your 1-minute test" else "Start Soft Lock?",
+            "$session\n$summary\nAndroid Settings will be blocked.$breakInfo$notice",
+            if (test) "Start test" else "Start") {
+            if (requireSoftConnection(test) && SoftBlocker.activeTest() == null &&
                 !softStore.read().active(SystemClock.elapsedRealtime())) {
                 if (test) {
                     SoftBlocker.startTest(apps, sites, strict, usingAllowlist, tabs, returnHome)
@@ -514,11 +662,12 @@ class MainActivity : ComponentActivity() {
         }
     }
 
-    private fun requireSoftConnection(): Boolean {
+    private fun requireSoftConnection(test: Boolean): Boolean {
         if (SoftBlocker.isConnected()) return true
-        if (!SoftBlocker.enabled(this)) openSettings(Settings.ACTION_ACCESSIBILITY_SETTINGS)
-        else prompt = Prompt("Blocking is paused", "Reconnect the Focus Lock accessibility service to start a session.",
-            "Open settings") { openSettings(Settings.ACTION_ACCESSIBILITY_SETTINGS) }
+        setupPrompt(if (test) SetupAction.SoftTest else SetupAction.Soft, SetupPermission.Accessibility,
+            "Connect Soft Lock", "Turn on the Focus Lock accessibility service so it can block your selected apps and sites.") {
+            openSettings(Settings.ACTION_ACCESSIBILITY_SETTINGS)
+        }
         return false
     }
 
@@ -555,7 +704,11 @@ class MainActivity : ComponentActivity() {
 
     internal fun offerBreak() {
         val b = EmergencyBreaks.current(this)
-        if (!b.enabled || b.remaining() == 0 || b.until > SystemClock.elapsedRealtime()) return
+        val now = SystemClock.elapsedRealtime()
+        if (!b.available(now)) {
+            notify("No emergency break is available right now.")
+            return
+        }
         prompt = Prompt("Take an emergency break?", "Use one of your ${b.remaining()} remaining breaks for up to ${b.minutes} min. Your session timer keeps running.", "Take break") {
             if (EmergencyBreaks.begin(this)) refreshHard() else notify("This break is no longer available.")
         }
@@ -569,7 +722,7 @@ class MainActivity : ComponentActivity() {
     }
 
     internal fun openNewSchedule() {
-        if (requireHard(exact = true)) sheet = "schedule"
+        sheet = "schedule"
     }
 
     internal fun startScheduleDraft(repeating: Boolean) {
@@ -584,7 +737,13 @@ class MainActivity : ComponentActivity() {
     }
 
     internal fun dismissSchedule() {
+        dismissScheduleReview()
         schedule = null
+    }
+
+    internal fun dismissScheduleReview() {
+        scheduleConfirmation = null
+        scheduleForReview = null
     }
 
     internal fun saveRepeatingSchedule(rule: Rule, name: String, days: Int, start: Int, end: Int) {
@@ -621,9 +780,13 @@ class MainActivity : ComponentActivity() {
     ) {
         val clock = SessionClock(this)
         if (!draft.repeats() && draft.to <= clock.wall) {
+            dismissScheduleReview()
             return notify("Choose a time and duration so the lock ends in the future.")
         }
-        if (draft.enabled && !requireHard(exact = true)) return
+        if (draft.enabled && !requireHard(SetupAction.Schedule)) {
+            scheduleForReview = draft
+            return
+        }
         val (current, upcoming) = previewSchedule(draft.copy().apply { enabled = true }, clock)
         val active = current.takeIf { draft.enabled }
         val next = upcoming ?: current.takeUnless { draft.enabled }
@@ -636,6 +799,7 @@ class MainActivity : ComponentActivity() {
                 scheduleConfirmation = null
                 applySchedule(draft, review, confirmedSelection, nextOnly)
             }
+            scheduleForReview = draft
             scheduleConfirmation = proposal
             return
         }

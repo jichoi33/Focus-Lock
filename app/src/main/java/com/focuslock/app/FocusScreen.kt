@@ -34,7 +34,7 @@ internal fun FocusWorkspace(activity: MainActivity) {
     val state = activity.snapshot ?: return
     val completed = activity.completedModes
     val hardActive = state.hard.active.isNotEmpty() && state.admin && state.secure
-    val dialogOpen = activity.sheet != null || activity.schedule != null || activity.prompt != null || activity.scheduleConfirmation != null
+    val dialogOpen = activity.sheet != null || activity.schedule != null || activity.prompt != null || activity.scheduleConfirmation != null || activity.hardStartReview != null
     val showCompletion = completed != 0 && !hardActive && !state.keyguardLocked
     if (showCompletion && !dialogOpen) {
         BackHandler(onBack = activity::dismissCompletion)
@@ -323,7 +323,15 @@ private fun SoftWorkspace(activity: MainActivity, state: FocusSnapshot) {
             BreakRow(activity, state)
         }
     } else {
-        val count = if (activity.allowlist) activity.allowedApps.size else activity.blockedApps.size
+        val apps = if (activity.allowlist) activity.allowedApps else activity.blockedApps
+        val count = apps.size
+        val appNames = remember(activity, apps) {
+            if (apps.isEmpty()) "" else {
+                val catalog = AppCatalog.launchable(activity).associateBy { it.id }
+                val labels = apps.map { catalog[it]?.label ?: it }.sortedBy { it.lowercase(Locale.ROOT) }
+                labels.take(2).joinToString(", ") + if (count > 2) " +${count - 2}" else ""
+            }
+        }
         val empty = !activity.allowlist && count == 0 && activity.blockedSites.isEmpty()
         val label = when {
             empty -> "Choose what to block"
@@ -348,6 +356,11 @@ private fun SoftWorkspace(activity: MainActivity, state: FocusSnapshot) {
                         else -> "${quantity(count, "app")} and ${quantity(sites, "site")} blocked"
                     }
                     Text(summary, style = MaterialTheme.typography.titleMedium)
+                    if (appNames.isNotEmpty()) {
+                        Text(appNames, style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 2,
+                            overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
+                    }
                     if (activity.allowlist) {
                         Caption(if (activity.allowBrowserTabs) "Supported in-app browser tabs allowed"
                             else "In-app browser tabs follow app rules")

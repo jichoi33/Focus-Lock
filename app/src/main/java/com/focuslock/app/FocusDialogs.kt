@@ -19,6 +19,8 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.saveable.listSaver
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.asImageBitmap
@@ -81,7 +83,7 @@ internal fun WorkspaceDialogs(activity: MainActivity, state: FocusSnapshot) {
                         InsetDivider()
                         SwitchRow("Allow in-app browser tabs", activity.allowBrowserTabs, { activity.allowBrowserTabs = it })
                         Box(Modifier.padding(start = 16.dp, end = 16.dp, bottom = 10.dp)) {
-                            Caption("Open links in supported browser tabs while keeping the full browser restricted.")
+                            Caption("Open links from allowed apps in supported in-app tabs. To open the full browser, add it to Allowed apps.")
                         }
                     } else {
                         InsetDivider()
@@ -169,7 +171,7 @@ internal fun WorkspaceDialogs(activity: MainActivity, state: FocusSnapshot) {
         key(rule.id) { ScheduleDialog(activity, rule) }
     }
     activity.scheduleConfirmation?.let { confirmation ->
-        val dismiss = { activity.scheduleConfirmation = null }
+        val dismiss = activity::dismissScheduleReview
         val active = confirmation.active
         val next = confirmation.next
         var defer by remember(confirmation) { mutableStateOf(active != null && next != null) }
@@ -211,14 +213,34 @@ internal fun WorkspaceDialogs(activity: MainActivity, state: FocusSnapshot) {
             }
         }
     }
+    activity.hardStartReview?.let { review ->
+        val dismiss = { activity.hardStartReview = null }
+        FocusDialog("Start Hard Lock?", dismiss, {
+            dismiss()
+            review.confirm()
+        }, review.action) {
+            Column(Modifier.weight(1f, fill = false).fillMaxWidth().verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                if (review.updated) Caption("The unlock time or schedule changed. Check it before locking.")
+                Text(review.unlock?.let { "Unlock at $it" } ?: "No scheduled unlock in the next 7 days",
+                    style = MaterialTheme.typography.titleLarge, color = MaterialTheme.colorScheme.primary)
+                Caption("${durationLabel(review.minutes)} timer")
+                review.extension?.let { Caption(it) }
+                HorizontalDivider()
+                Text(review.breakInfo, style = MaterialTheme.typography.titleMedium)
+                review.notificationInfo?.let { Caption(it) }
+            }
+        }
+    }
     activity.prompt?.let { prompt ->
         val dismiss = { activity.prompt = null }
+        val cancel = { dismiss(); prompt.cancel() }
         AlertDialog(
-            onDismissRequest = dismiss,
+            onDismissRequest = cancel,
             title = { Text(prompt.title, style = MaterialTheme.typography.headlineSmall) },
             text = { Text(prompt.text, style = MaterialTheme.typography.bodyMedium) },
             confirmButton = { TextButton(onClick = { dismiss(); prompt.confirm() }) { Text(prompt.action) } },
-            dismissButton = { TextButton(onClick = dismiss) { Text("Cancel") } },
+            dismissButton = { TextButton(onClick = cancel) { Text("Cancel") } },
             containerColor = MaterialTheme.colorScheme.surface,
             shape = RoundedCornerShape(25.dp)
         )
@@ -328,6 +350,10 @@ private fun BreaksDialog(activity: MainActivity, state: FocusSnapshot, close: ()
                     label = { Text("Breaks per session") }, enabled = !locked, singleLine = true, keyboardOptions = keyboard, modifier = Modifier.fillMaxWidth())
             }
             Caption(if (locked) "Change these limits after your session ends." else "Your session timer keeps running during a break.")
+            if (enabled) {
+                Caption("During Soft Lock, tap Emergency break in Focus Lock or its notification. It also appears on the blocked screen when it stays open.")
+                Caption("During Hard Lock, expand its lock screen notification to find Emergency break.")
+            }
         }
         if (locked) PrimaryButton("Done", close)
         else PrimaryButton("Save", { activity.configureBreaks(enabled, if (enabled) minutes.toIntOrNull() ?: 0 else b.minutes,
@@ -452,20 +478,35 @@ private fun SitesDialog(
 @Composable
 private fun ScheduleDialog(activity: MainActivity, rule: Rule) {
     val repeating = rule.repeats()
-    val close = activity::dismissSchedule
-    var name by remember { mutableStateOf(rule.name.orEmpty().takeUnless {
-        repeating && it == DEFAULT_REPEAT_NAME
-    }.orEmpty()) }
-    var preset by remember { mutableStateOf(rule.days.takeIf { it in repeatDayPresets }) }
-    var customDays by remember { mutableStateOf(rule.days.takeUnless { it in repeatDayPresets }) }
+    val originalName = rule.name.orEmpty().takeUnless { repeating && it == DEFAULT_REPEAT_NAME }.orEmpty()
+    val originalDuration = DurationInput.of(rule.requestedDuration().coerceIn(1, Rule.DAY))
+    var name by rememberSaveable { mutableStateOf(originalName) }
+    var preset by rememberSaveable { mutableStateOf(rule.days.takeIf { it in repeatDayPresets }) }
+    var customDays by rememberSaveable { mutableStateOf(rule.days.takeUnless { it in repeatDayPresets }) }
     val days = preset ?: customDays ?: rule.days
-    var startMinute by remember { mutableIntStateOf(rule.startMinute) }
-    var endMinute by remember { mutableIntStateOf(rule.repeatEndMinute()) }
-    var firstAt by remember { mutableLongStateOf(rule.from) }
-    var duration by remember { mutableStateOf(DurationInput.of(rule.requestedDuration().coerceIn(1, Rule.DAY))) }
-    var dateDialog by remember { mutableStateOf(false) }
-    var timeField by remember { mutableStateOf<String?>(null) }
-    var date by remember { mutableStateOf(Instant.ofEpochMilli(firstAt).atZone(ZoneId.systemDefault()).toLocalDate()) }
+    var startMinute by rememberSaveable { mutableIntStateOf(rule.startMinute) }
+    var endMinute by rememberSaveable { mutableIntStateOf(rule.repeatEndMinute()) }
+    var firstAt by rememberSaveable { mutableLongStateOf(rule.from) }
+    var duration by rememberSaveable(stateSaver = listSaver(
+        save = { listOf(it.hours, it.minutes) },
+        restore = { DurationInput(it[0], it[1]) }
+    )) { mutableStateOf(originalDuration) }
+    var dateDialog by rememberSaveable { mutableStateOf(false) }
+    var timeField by rememberSaveable { mutableStateOf<String?>(null) }
+    var dateDay by rememberSaveable {
+        mutableLongStateOf(Instant.ofEpochMilli(firstAt).atZone(ZoneId.systemDefault()).toLocalDate().toEpochDay())
+    }
+    val date = LocalDate.ofEpochDay(dateDay)
+    val changed = name != originalName || if (repeating) {
+        days != rule.days || startMinute != rule.startMinute || endMinute != rule.repeatEndMinute()
+    } else {
+        firstAt != rule.from || duration != originalDuration
+    }
+    val close = {
+        if (changed) activity.prompt = Prompt("Discard schedule edits?", "Your unsaved changes will be lost.",
+            "Discard changes", confirm = activity::dismissSchedule)
+        else activity.dismissSchedule()
+    }
     FocusDialog(if (repeating) "Repeating lock" else "One-time lock", close, {
         if (repeating) activity.saveRepeatingSchedule(rule, name, days, startMinute, endMinute)
         else activity.saveOneTimeSchedule(rule, name, firstAt, duration)
@@ -514,7 +555,7 @@ private fun ScheduleDialog(activity: MainActivity, rule: Rule) {
 
     if (dateDialog) {
         DateDialog(date, { dateDialog = false }) { selected ->
-            date = selected
+            dateDay = selected.toEpochDay()
             dateDialog = false
             timeField = "Start time"
         }
@@ -580,7 +621,9 @@ private fun ScheduleDayPicker(days: Int, onChange: (Int) -> Unit) {
                             shape = androidx.compose.foundation.shape.CircleShape,
                             color = if (selected) colors.primary else colors.surfaceContainer,
                             contentColor = if (selected) colors.onPrimary else colors.onSurfaceVariant) {
-                            Box(contentAlignment = Alignment.Center) {
+                            Column(horizontalAlignment = Alignment.CenterHorizontally,
+                                verticalArrangement = Arrangement.Center) {
+                                if (selected) Symbol("Check", modifier = Modifier.size(12.dp), tint = colors.onPrimary)
                                 Text(focusDays[index], style = MaterialTheme.typography.labelLarge,
                                     fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal)
                             }

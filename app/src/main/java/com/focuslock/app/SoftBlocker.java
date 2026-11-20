@@ -84,6 +84,7 @@ public final class SoftBlocker extends AccessibilityService {
     private final CoverRelease release = new CoverRelease();
     private final AppReturn appReturn = new AppReturn();
     private long breakUntil;
+    private boolean breakAvailable;
     static void refreshBreak() {
         if (connected != null) connected.reload();
         reportChange();
@@ -168,12 +169,18 @@ public final class SoftBlocker extends AccessibilityService {
         detectedBrowsers = inspectBrowsers ? AppCatalog.browsers(this) : java.util.Collections.emptySet();
         customTabWindow = -1;
         navigation.reset();
-        breakUntil = EmergencyBreaks.current(this).until;
+        updateBreakState();
         LockNotifications.showSoft(this, session, breakUntil);
         handler.removeCallbacks(update);
         queued = false;
         release.reset();
         checkWindow();
+    }
+
+    private void updateBreakState() {
+        EmergencyBreaks breaks = EmergencyBreaks.current(this);
+        breakUntil = breaks.until;
+        breakAvailable = breaks.available(SystemClock.elapsedRealtime());
     }
 
     @Override public void onAccessibilityEvent(AccessibilityEvent event) {
@@ -214,8 +221,8 @@ public final class SoftBlocker extends AccessibilityService {
         }
         boolean hardActive = now < FocusService.settingsBlockedUntil;
         if (breakUntil > 0 && breakUntil <= now) {
-            breakUntil = 0;
-            LockNotifications.showSoft(this, session, 0);
+            updateBreakState();
+            LockNotifications.showSoft(this, session, breakUntil);
             reportChange();
         }
         boolean paused = !session.test && breakUntil > now;
@@ -554,6 +561,7 @@ public final class SoftBlocker extends AccessibilityService {
         private final Button previous;
         private final Button home;
         private final Button stopTest;
+        private final Button emergency;
 
         BlockCover(String message, boolean showPrevious) {
             super(SoftBlocker.this);
@@ -585,6 +593,9 @@ public final class SoftBlocker extends AccessibilityService {
             previous = addButton("Previous page", () -> leaveCover(GLOBAL_ACTION_BACK));
             home = addButton("Go Home", () -> leaveCover(GLOBAL_ACTION_HOME));
             stopTest = addButton("End test", SoftBlocker::endTest);
+            emergency = addButton("Emergency break", () ->
+                    startActivity(LockNotifications.openSoftBreak(SoftBlocker.this)
+                            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)));
             updateMessage(message, showPrevious);
             updateAppearance(getResources().getConfiguration());
         }
@@ -595,6 +606,8 @@ public final class SoftBlocker extends AccessibilityService {
             String title = testing ? "Soft Lock test" : showPrevious ? "Website blocked" : "App blocked";
             if (returning) message += " Returning to Home…";
             home.setVisibility(returning ? GONE : VISIBLE);
+            boolean canBreak = !returning && !testing && breakAvailable && session.active(SystemClock.elapsedRealtime());
+            emergency.setVisibility(canBreak ? VISIBLE : GONE);
             if (!title.contentEquals(heading.getText())) heading.setText(title);
             int stopVisibility = testing ? VISIBLE : GONE;
             if (stopTest.getVisibility() != stopVisibility) stopTest.setVisibility(stopVisibility);
@@ -614,9 +627,11 @@ public final class SoftBlocker extends AccessibilityService {
             previous.setTextColor(buttonText);
             home.setTextColor(buttonText);
             stopTest.setTextColor(buttonText);
+            emergency.setTextColor(buttonText);
             ((GradientDrawable) previous.getBackground()).setColor(buttonFill);
             ((GradientDrawable) home.getBackground()).setColor(buttonFill);
             ((GradientDrawable) stopTest.getBackground()).setColor(buttonFill);
+            ((GradientDrawable) emergency.getBackground()).setColor(buttonFill);
         }
 
         @Override public boolean dispatchKeyEvent(KeyEvent event) {

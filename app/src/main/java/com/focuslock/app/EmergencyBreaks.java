@@ -23,6 +23,10 @@ final class EmergencyBreaks {
 
     int remaining() { return Math.max(0, limit - used); }
 
+    boolean available(long now) {
+        return enabled && remaining() > 0 && until <= now && sessionEnd > now;
+    }
+
     private static SharedPreferences prefs(Context c) {
         return c.getSharedPreferences("emergency_breaks", Context.MODE_PRIVATE);
     }
@@ -93,7 +97,7 @@ final class EmergencyBreaks {
     static boolean begin(Context c) {
         EmergencyBreaks b = current(c);
         SessionClock clock = new SessionClock(c);
-        if (!b.enabled || b.until > clock.elapsed || b.remaining() == 0 || b.sessionEnd <= clock.elapsed) return false;
+        if (!b.available(clock.elapsed)) return false;
         long duration = Math.min(b.minutes * Rule.MINUTE, b.sessionEnd - clock.elapsed);
         SharedPreferences.Editor edit = prefs(c).edit().putInt("used", b.used + 1);
         storeTimer(edit, clock.start(duration));
