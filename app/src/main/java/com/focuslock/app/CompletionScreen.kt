@@ -13,6 +13,10 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
+import androidx.compose.material3.MaterialShapes
+import androidx.compose.material3.toPath
+import androidx.compose.ui.graphics.drawscope.withTransform
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -26,7 +30,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.drawWithCache
 import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.PathMeasure
 import androidx.compose.ui.graphics.StrokeCap
@@ -56,8 +59,7 @@ internal fun CompletionScreen(modes: Int, results: List<CompletedFocus>, onDone:
         else -> "Hard Lock and Soft Lock complete"
     }
     Box(
-        Modifier.fillMaxSize().background(spectrumBrush())
-            .background(Brush.verticalGradient(listOf(colors.background.copy(alpha = 0.06f), colors.background.copy(alpha = 0.46f)))).safeDrawingPadding(),
+        Modifier.fillMaxSize().background(colors.surface).safeDrawingPadding(),
         contentAlignment = Alignment.Center
     ) {
         Column(Modifier.widthIn(max = 420.dp).fillMaxSize().padding(horizontal = 28.dp, vertical = 20.dp)) {
@@ -104,6 +106,7 @@ internal fun CompletionScreen(modes: Int, results: List<CompletedFocus>, onDone:
     }
 }
 
+@OptIn(ExperimentalMaterial3ExpressiveApi::class)
 @Composable
 private fun CompletionMark() {
     val colors = MaterialTheme.colorScheme
@@ -125,13 +128,10 @@ private fun CompletionMark() {
         }
     }
 
+    val seal = MaterialShapes.Cookie12Sided.toPath()
     Box(Modifier.size(204.dp).drawWithCache {
         val unit = size.minDimension
         val origin = Offset(size.width / 2f, size.height / 2f)
-        val glow = Brush.radialGradient(listOf(colors.primaryContainer, colors.primaryContainer.copy(alpha = 0f)),
-            center = origin, radius = unit * 0.5f)
-        val enamel = Brush.linearGradient(listOf(colors.primary, colors.secondary),
-            start = origin - Offset(42.dp.toPx(), 42.dp.toPx()), end = origin + Offset(42.dp.toPx(), 42.dp.toPx()))
         val ringStroke = Stroke(1.dp.toPx())
         val sparkStroke = 2.dp.toPx()
         val checkStroke = Stroke(3.5.dp.toPx(), cap = StrokeCap.Round, join = StrokeJoin.Round)
@@ -150,7 +150,6 @@ private fun CompletionMark() {
             val breath = pulse?.value ?: 0f
             val arrival = celebrationPhase(time, 0f, 0.48f)
             val ripple = celebrationPhase(time, 0.20f, 0.88f)
-            drawCircle(glow, radius = unit * 0.5f, alpha = arrival)
             drawCircle(colors.primary.copy(alpha = 0.18f * ripple),
                 radius = unit * lerp(0.23f, 0.34f + 0.025f * breath, ripple), style = ringStroke)
             drawCircle(colors.primary.copy(alpha = 0.12f * ripple),
@@ -167,11 +166,15 @@ private fun CompletionMark() {
             drawCircle(colors.primary.copy(alpha = 0.42f * ripple), radius = 2.5.dp.toPx() * ripple,
                 center = origin + (dot - origin) * lerp(0.56f, 1f, ripple))
 
-            drawCircle(enamel, radius = 42.dp.toPx() * lerp(0.84f, 1f, arrival))
+            val diameter = 90.dp.toPx() * lerp(0.84f, 1f, arrival)
+            withTransform({
+                translate(origin.x - diameter / 2, origin.y - diameter / 2)
+                scale(diameter, diameter, Offset.Zero)
+            }) { drawPath(seal, colors.tertiaryContainer) }
             val trace = celebrationPhase(time, 0.16f, 0.67f)
             visibleCheck.reset()
             if (checkLength.getSegment(0f, checkLength.length * trace, visibleCheck, startWithMoveTo = true)) {
-                drawPath(visibleCheck, colors.onPrimary, style = checkStroke)
+                drawPath(visibleCheck, colors.onTertiaryContainer, style = checkStroke)
             }
         }
     })

@@ -275,7 +275,7 @@ internal fun FocusDialog(
     Dialog(onDismissRequest = onDismiss, properties = DialogProperties(usePlatformDefaultWidth = false)) {
         Box(Modifier.fillMaxWidth().padding(horizontal = 20.dp), contentAlignment = Alignment.Center) {
             Surface(Modifier.widthIn(max = 480.dp).fillMaxWidth(),
-                color = MaterialTheme.colorScheme.surface, shape = RoundedCornerShape(27.dp)) {
+                color = MaterialTheme.colorScheme.surfaceContainerHigh, shape = MaterialTheme.shapes.extraLarge) {
                 Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(13.dp)) {
                     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                         Text(title, Modifier.weight(1f), style = MaterialTheme.typography.headlineSmall)
@@ -650,6 +650,7 @@ private fun ScheduleDialog(activity: MainActivity, rule: Rule) {
     }
 }
 
+@OptIn(ExperimentalMaterial3ExpressiveApi::class)
 @Composable
 private fun ScheduleDayPresets(selected: Int?, onSelect: (Int?) -> Unit) {
     val fontScale = LocalDensity.current.fontScale
@@ -660,12 +661,11 @@ private fun ScheduleDayPresets(selected: Int?, onSelect: (Int?) -> Unit) {
             choices.chunked(columns).forEach { row ->
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     row.forEach { (mask, label) ->
-                        FilterChip(
-                            selected = selected == mask,
-                            onClick = { onSelect(mask) },
-                            modifier = Modifier.weight(1f).heightIn(min = 48.dp).semantics { role = Role.RadioButton },
-                            label = { Text(label) }
-                        )
+                        ToggleButton(
+                            checked = selected == mask,
+                            onCheckedChange = { onSelect(mask) },
+                            modifier = Modifier.weight(1f).heightIn(min = 48.dp).semantics { role = Role.RadioButton }
+                        ) { Text(label) }
                     }
                 }
             }

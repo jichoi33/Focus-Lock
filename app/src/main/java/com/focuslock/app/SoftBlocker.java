@@ -622,7 +622,7 @@ public final class SoftBlocker extends AccessibilityService {
 
             content = new LinearLayout(getContext());
             content.setOrientation(LinearLayout.VERTICAL);
-            content.setGravity(Gravity.CENTER);
+            content.setGravity(Gravity.CENTER_VERTICAL | Gravity.START);
             content.setPadding(dp(24), dp(28), dp(24), dp(28));
             addView(content, new ScrollView.LayoutParams(
                     ScrollView.LayoutParams.MATCH_PARENT, ScrollView.LayoutParams.WRAP_CONTENT));
@@ -632,7 +632,7 @@ public final class SoftBlocker extends AccessibilityService {
             icon.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO);
             content.addView(icon, new LinearLayout.LayoutParams(dp(48), dp(48)));
 
-            heading = addText(28, 16);
+            heading = addText(34, 24);
             heading.setTypeface(Typeface.create("sans-serif-medium", Typeface.NORMAL));
             if (android.os.Build.VERSION.SDK_INT >= 28) heading.setAccessibilityHeading(true);
             deadline = addText(18, 6);
@@ -661,20 +661,17 @@ public final class SoftBlocker extends AccessibilityService {
         void updateAppearance(Configuration configuration) {
             boolean dark = (configuration.uiMode & Configuration.UI_MODE_NIGHT_MASK)
                     == Configuration.UI_MODE_NIGHT_YES;
-            int[] backdrop = {getContext().getColor(R.color.spectrum_mint), getContext().getColor(R.color.spectrum_sky),
-                    getContext().getColor(R.color.spectrum_lilac), getContext().getColor(R.color.spectrum_rose),
-                    getContext().getColor(R.color.spectrum_peach)};
-            setBackground(new GradientDrawable(GradientDrawable.Orientation.TL_BR, backdrop));
-            heading.setTextColor(dark ? 0xffecf2ec : 0xff202925);
-            deadline.setTextColor(dark ? 0xff8dd6b8 : 0xff194a3d);
-            detail.setTextColor(dark ? 0xffb5c2b8 : 0xff53615a);
+            setBackgroundColor(dark ? 0xff111319 : 0xfff9f9ff);
+            heading.setTextColor(dark ? 0xffe3e3ec : 0xff191b23);
+            deadline.setTextColor(dark ? 0xffb4c5ff : 0xff102963);
+            detail.setTextColor(dark ? 0xffc5c6d2 : 0xff444753);
             for (Button button : Arrays.asList(stopTest, previous, home)) {
                 boolean emphasized = button == primary;
-                int text = emphasized ? (dark ? 0xff09382a : 0xffffffff) : (dark ? 0xffcdeedf : 0xff194a3d);
-                int fill = emphasized ? (dark ? 0xff8dd6b8 : 0xff176552) : (dark ? 0xa820282c : 0xb3ffffff);
+                int text = emphasized ? (dark ? 0xff0c2878 : 0xffffffff) : (dark ? 0xffdce3ff : 0xff102963);
+                int fill = emphasized ? (dark ? 0xffb4c5ff : 0xff284db9) : (dark ? 0xff263f80 : 0xffdbe2ff);
                 GradientDrawable shape = new GradientDrawable();
                 shape.setColor(fill);
-                shape.setCornerRadius(dp(16));
+                shape.setCornerRadius(dp(28));
                 button.setTextColor(text);
                 button.setBackground(new RippleDrawable(ColorStateList.valueOf(dark ? 0x33ffffff : 0x26000000),
                         shape, null));
@@ -694,7 +691,7 @@ public final class SoftBlocker extends AccessibilityService {
         private TextView addText(int size, int topMargin) {
             TextView view = new TextView(getContext());
             view.setTextSize(size);
-            view.setGravity(Gravity.CENTER);
+            view.setGravity(Gravity.START);
             LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(
                     LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT);
             params.topMargin = dp(topMargin);
@@ -711,7 +708,7 @@ public final class SoftBlocker extends AccessibilityService {
             button.setMinHeight(dp(48));
             button.setOnClickListener(view -> action.run());
             LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(
-                    dp(224), LinearLayout.LayoutParams.WRAP_CONTENT);
+                    LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT);
             params.topMargin = dp(topMargin);
             content.addView(button, params);
             return button;
