@@ -1,33 +1,34 @@
 package com.focuslock.app
 
+import android.os.Build
+import android.widget.EditText
+import android.widget.NumberPicker
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.text.BasicTextField
-import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.StrokeJoin
+import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.scale
 import androidx.compose.ui.graphics.vector.PathParser
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.input.KeyboardType
-import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.viewinterop.AndroidView
 
 private val light = lightColorScheme(
     primary = Color(0xFF1659CD), onPrimary = Color.White,
@@ -118,31 +119,77 @@ internal fun TimerCard(modifier: Modifier = Modifier, content: @Composable Colum
 @Composable
 internal fun DurationFields(value: DurationInput, onChange: (DurationInput) -> Unit) {
     val colors = MaterialTheme.colorScheme
-    Surface(shape = RoundedCornerShape(17.dp), color = colors.surface,
+    val total = value.total ?: 30
+    val hours = total / 60
+    val minutes = total % 60
+    val maximumHours = Rule.DAY / 60
+    val minimumMinutes = if (hours == 0) 1 else 0
+    val maximumMinutes = if (hours == maximumHours) 0 else 59
+    Surface(shape = RoundedCornerShape(17.dp), color = colors.surfaceContainer,
         border = BorderStroke(1.dp, colors.outlineVariant)) {
-        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-            DurationField("Hours", value.hours, { onChange(value.copy(hours = it)) }, Modifier.weight(1f))
-            Box(Modifier.width(1.dp).height(47.dp).background(colors.outlineVariant))
-            DurationField("Minutes", value.minutes, { onChange(value.copy(minutes = it)) }, Modifier.weight(1f))
+        Row(Modifier.fillMaxWidth().padding(horizontal = 10.dp, vertical = 10.dp),
+            verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            DurationWheel("Hours", hours, 0..maximumHours, Modifier.weight(1f)) { nextHours ->
+                val nextMinutes = when (nextHours) {
+                    0 -> minutes.coerceAtLeast(1)
+                    maximumHours -> 0
+                    else -> minutes
+                }
+                onChange(DurationInput.of(nextHours * 60 + nextMinutes))
+            }
+            DurationWheel("Minutes", minutes, minimumMinutes..maximumMinutes, Modifier.weight(1f),
+                twoDigits = true) { nextMinutes ->
+                onChange(DurationInput.of(hours * 60 + nextMinutes))
+            }
         }
     }
 }
 
 @Composable
-private fun DurationField(label: String, value: String, update: (String) -> Unit, modifier: Modifier) {
+private fun DurationWheel(label: String, value: Int, range: IntRange, modifier: Modifier,
+                          twoDigits: Boolean = false, onValueChange: (Int) -> Unit) {
     val colors = MaterialTheme.colorScheme
-    Column(modifier.padding(vertical = 9.dp, horizontal = 8.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-        Text(label, style = MaterialTheme.typography.labelMedium, color = colors.onSurfaceVariant)
-        BasicTextField(
-            value = value,
-            onValueChange = { if (it.length <= 2 && it.all(Char::isDigit)) update(it) },
-            modifier = Modifier.fillMaxWidth().padding(vertical = 3.dp)
-                .semantics { contentDescription = label },
-            textStyle = TextStyle(color = colors.onSurface, fontSize = 35.sp, lineHeight = 42.sp,
-                fontWeight = FontWeight.Medium, textAlign = TextAlign.Center, fontFeatureSettings = "'tnum'"),
-            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-            cursorBrush = SolidColor(colors.primary),
-            singleLine = true
+    val density = LocalDensity.current
+    val textSize = with(density) { 27.sp.toPx() }
+    val dividerHeight = with(density) { 1.dp.roundToPx() }
+    val wheelHeight = with(density) { (32.sp.toDp() * 3 + 16.dp).coerceAtLeast(132.dp) }
+    val listener = rememberUpdatedState(onValueChange)
+
+    Column(modifier, horizontalAlignment = Alignment.CenterHorizontally) {
+        Text(label, style = MaterialTheme.typography.labelLarge, color = colors.onSurfaceVariant)
+        AndroidView(
+            modifier = Modifier.fillMaxWidth().height(wheelHeight),
+            factory = { context ->
+                NumberPicker(context).apply {
+                    contentDescription = label
+                    descendantFocusability = NumberPicker.FOCUS_BLOCK_DESCENDANTS
+                    // Keep the native scroll and accessibility controls without opening the keyboard.
+                    for (index in 0 until childCount) {
+                        (getChildAt(index) as? EditText)?.apply {
+                            isFocusable = false
+                            isLongClickable = false
+                            showSoftInputOnFocus = false
+                        }
+                    }
+                    if (twoDigits) setFormatter { it.toString().padStart(2, '0') }
+                    setOnValueChangedListener { _, _, selected -> listener.value(selected) }
+                }
+            },
+            update = { picker ->
+                if (picker.minValue > range.last) picker.minValue = range.first
+                if (picker.maxValue != range.last) picker.maxValue = range.last
+                if (picker.minValue != range.first) picker.minValue = range.first
+                if (picker.wrapSelectorWheel) picker.wrapSelectorWheel = false
+                if (picker.value != value) picker.value = value
+                val enabled = range.first != range.last
+                if (picker.isEnabled != enabled) picker.isEnabled = enabled
+                if (Build.VERSION.SDK_INT >= 29) {
+                    val textColor = (if (enabled) colors.onSurface else colors.onSurfaceVariant).toArgb()
+                    if (picker.textColor != textColor) picker.textColor = textColor
+                    if (picker.textSize != textSize) picker.textSize = textSize
+                    if (picker.selectionDividerHeight != dividerHeight) picker.selectionDividerHeight = dividerHeight
+                }
+            }
         )
     }
 }

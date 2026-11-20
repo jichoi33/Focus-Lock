@@ -824,7 +824,7 @@ class MainActivity : ComponentActivity() {
         }
     }
 
-    private fun invalidDuration() = notify("Enter 0–24 hours and 0–59 minutes, for a total of 1 minute to 24 hours.")
+    private fun invalidDuration() = notify("Choose a duration from 1 minute to 24 hours.")
     internal fun notify(message: String) = Toast.makeText(this, message, Toast.LENGTH_LONG).show()
 }
 

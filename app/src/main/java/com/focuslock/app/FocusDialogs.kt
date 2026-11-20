@@ -47,6 +47,7 @@ internal fun WorkspaceDialogs(activity: MainActivity, state: FocusSnapshot) {
         "duration" -> {
             val hard = activity.mode == FocusMode.Hard
             var value by remember { mutableStateOf(if (hard) activity.quickDuration else activity.softDuration) }
+            var presetRevision by remember { mutableIntStateOf(0) }
             FocusDialog("Session duration", close, {
                 if (value.total == null) activity.notify("Enter a duration between 1 minute and 24 hours.")
                 else {
@@ -63,12 +64,18 @@ internal fun WorkspaceDialogs(activity: MainActivity, state: FocusSnapshot) {
                         listOf(15, 30, 60).forEach { minutes ->
                             FilterChip(
                                 selected = value.total == minutes,
-                                onClick = { value = DurationInput.of(minutes) },
+                                onClick = {
+                                    value = DurationInput.of(minutes)
+                                    // Replace the wheels so a previous fling cannot override the preset.
+                                    presetRevision++
+                                },
                                 label = { Text(durationLabel(minutes)) }
                             )
                         }
                     }
-                    DurationFields(value) { value = it }
+                    key(presetRevision) {
+                        DurationFields(value) { value = it }
+                    }
                 }
             }
         }
@@ -148,7 +155,9 @@ internal fun WorkspaceDialogs(activity: MainActivity, state: FocusSnapshot) {
         "extend" -> {
             var duration by remember { mutableStateOf(DurationInput.of(10)) }
             FocusDialog("Extend session", close, onConfirm = { activity.extendSoft(duration) }, confirmLabel = "Add time") {
-                DurationFields(duration) { duration = it }
+                Column(Modifier.weight(1f, fill = false).verticalScroll(rememberScrollState())) {
+                    DurationFields(duration) { duration = it }
+                }
             }
         }
         "apps" -> {
