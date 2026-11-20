@@ -16,6 +16,8 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
@@ -43,10 +45,11 @@ internal fun FocusWorkspace(activity: MainActivity) {
     Box(Modifier.fillMaxSize().background(colors.background).safeDrawingPadding().imePadding(),
         contentAlignment = Alignment.TopCenter) {
         Column(Modifier.widthIn(max = 540.dp).fillMaxWidth().fillMaxHeight()) {
-            WorkspaceHeader(Modifier.padding(start = 24.dp, end = 20.dp, top = 16.dp, bottom = 15.dp)) {
+            WorkspaceHeader(Modifier.padding(start = 24.dp, end = 20.dp, top = 8.dp, bottom = 8.dp)) {
                 activity.sheet = "settings"
             }
-            ModeControl(activity.mode, { activity.mode = it }, Modifier.padding(horizontal = 24.dp))
+            ModeControl(activity.mode, { activity.mode = it }, Modifier.padding(horizontal = 24.dp),
+                showHelp = !state.admin && !state.accessibility)
             key(activity.mode) {
                 Column(
                     Modifier.weight(1f).fillMaxWidth().verticalScroll(rememberScrollState())
@@ -79,7 +82,7 @@ internal fun FocusWorkspace(activity: MainActivity) {
 private fun WorkspaceHeader(modifier: Modifier = Modifier, onSettings: () -> Unit) {
     val colors = MaterialTheme.colorScheme
     Row(modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-        Text("Focus Lock", Modifier.weight(1f), style = MaterialTheme.typography.headlineLarge)
+        Text("Focus Lock", Modifier.weight(1f), style = MaterialTheme.typography.headlineSmall)
         Surface(shape = RoundedCornerShape(16.dp), color = colors.surface) {
             IconButton(onClick = onSettings, modifier = Modifier.size(48.dp)) {
                 Symbol("Sliders", "Settings", tint = colors.onSurfaceVariant)
@@ -89,7 +92,8 @@ private fun WorkspaceHeader(modifier: Modifier = Modifier, onSettings: () -> Uni
 }
 
 @Composable
-private fun ModeControl(mode: FocusMode, onChange: (FocusMode) -> Unit, modifier: Modifier = Modifier) {
+private fun ModeControl(mode: FocusMode, onChange: (FocusMode) -> Unit, modifier: Modifier = Modifier,
+                        showHelp: Boolean = false) {
     val colors = MaterialTheme.colorScheme
     Row(
         modifier.fillMaxWidth().background(colors.surfaceContainerHighest, RoundedCornerShape(15.dp))
@@ -107,8 +111,13 @@ private fun ModeControl(mode: FocusMode, onChange: (FocusMode) -> Unit, modifier
                         .heightIn(min = 44.dp).padding(vertical = 7.dp, horizontal = 4.dp),
                     contentAlignment = Alignment.Center
                 ) {
-                    Text(item.label, style = MaterialTheme.typography.labelLarge,
-                        color = if (selected) colors.onSurface else colors.onSurfaceVariant)
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        Text(item.label, style = MaterialTheme.typography.labelLarge,
+                            color = if (selected) colors.onSurface else colors.onSurfaceVariant)
+                        if (showHelp) Text(if (item == FocusMode.Hard) "Lock the whole phone" else "Block apps and sites",
+                            style = MaterialTheme.typography.labelSmall, color = colors.onSurfaceVariant,
+                            textAlign = androidx.compose.ui.text.style.TextAlign.Center)
+                    }
                 }
             }
         }
@@ -196,9 +205,9 @@ private fun HardWorkspace(activity: MainActivity, state: FocusSnapshot) {
     )
     if (scheduled.isEmpty()) {
         Caption("Add a one-time or repeating lock.")
-    } else GroupCard {
+    } else Column {
         scheduled.forEachIndexed { index, rule ->
-            if (index > 0) InsetDivider()
+            if (index > 0) HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
             ScheduleCard(activity, rule, rule.id in activeIds,
                 { activity.schedule = rule }, { activity.toggleSchedule(rule) }, { activity.deleteSchedule(rule) })
         }
@@ -221,14 +230,19 @@ private fun ScheduleHeading(onAdd: () -> Unit) {
 private fun SessionCard(duration: DurationInput, edit: () -> Unit, label: String, start: () -> Unit,
                         rules: (@Composable () -> Unit)? = null) {
     TimerCard {
-        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-            Text("Duration", Modifier.weight(1f), style = MaterialTheme.typography.titleMedium)
-            TextButton(onClick = edit) { Text("Edit") }
+        Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            Row(Modifier.fillMaxWidth().clickable(onClickLabel = "Edit duration", onClick = edit),
+                verticalAlignment = Alignment.CenterVertically) {
+                Column(Modifier.weight(1f)) {
+                    Caption("Duration")
+                    Text(durationLabel(duration.total ?: 30),
+                        style = TextStyle(fontSize = 48.sp, lineHeight = 54.sp, letterSpacing = (-2).sp,
+                            fontWeight = FontWeight.Medium, fontFeatureSettings = "'tnum'"))
+                }
+                Text("Edit", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary)
+            }
+            rules?.invoke()
         }
-        Text(durationLabel(duration.total ?: 30), Modifier.clickable(onClick = edit),
-            style = TextStyle(fontSize = 48.sp, lineHeight = 54.sp, letterSpacing = (-2).sp,
-                fontWeight = FontWeight.Medium, fontFeatureSettings = "'tnum'"))
-        rules?.invoke()
         PrimaryButton(label, start)
     }
 }
@@ -253,33 +267,22 @@ private fun ScheduleCard(activity: MainActivity, rule: Rule, active: Boolean,
     val ended = !rule.repeats() && rule.to <= System.currentTimeMillis()
     val colors = MaterialTheme.colorScheme
     val edit = if (active) Modifier else Modifier.clickable(onClickLabel = "Edit schedule", onClick = onEdit)
-    Column {
-        Column(Modifier.fillMaxWidth().then(edit).padding(horizontal = 16.dp, vertical = 14.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                Text(rule.name, Modifier.weight(1f), style = MaterialTheme.typography.titleMedium)
-                if (active) Text("Active", color = colors.primary, style = MaterialTheme.typography.labelMedium)
-                else {
-                    Caption("Edit")
-                    Symbol("Chev", tint = colors.onSurfaceVariant)
-                }
-            }
-            if (rule.repeats()) {
-                Text("${activity.timeLabel(rule.startMinute)} → ${activity.timeLabel(rule.repeatEndMinute())}",
-                    style = MaterialTheme.typography.titleLarge)
-                Caption(repeatingDaysLabel(rule.days))
-                if (rule.endsNextDay()) Caption("Ends the next day")
-            } else {
-                Text(activity.dateLabel(rule.from), style = MaterialTheme.typography.titleLarge)
-                Caption(durationLabel(rule.requestedDuration()))
-            }
-            if (!active && !rule.enabled && !ended) Caption("Turned off")
+    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+        Column(Modifier.weight(1f).then(edit).padding(vertical = 14.dp, horizontal = 4.dp),
+            verticalArrangement = Arrangement.spacedBy(3.dp)) {
+            val time = if (rule.repeats()) {
+                val range = "${activity.timeLabel(rule.startMinute)} – ${activity.timeLabel(rule.repeatEndMinute())}"
+                if (rule.endsNextDay()) "$range (next day)" else range
+            } else activity.dateLabel(rule.from)
+            Text(time, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+            Text(rule.name, style = MaterialTheme.typography.bodyMedium)
+            Caption(if (rule.repeats()) repeatingDaysLabel(rule.days) else durationLabel(rule.requestedDuration()))
         }
-        if (!active) {
-            TextButton(onClick = if (ended) onDelete else onToggle, modifier = Modifier.padding(start = 8.dp)) {
-                Text(if (ended) "Delete" else if (rule.enabled) "Turn off" else "Turn on")
-            }
+        when {
+            active -> Text("Active", color = colors.primary, style = MaterialTheme.typography.labelMedium)
+            ended -> TextButton(onClick = onDelete) { Text("Delete") }
+            else -> Switch(rule.enabled, { onToggle() },
+                modifier = Modifier.semantics { contentDescription = "${rule.name} schedule" })
         }
     }
 }

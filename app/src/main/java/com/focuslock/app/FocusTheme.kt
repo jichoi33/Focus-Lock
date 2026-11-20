@@ -3,7 +3,6 @@ package com.focuslock.app
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -14,7 +13,6 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.StrokeCap
@@ -110,8 +108,7 @@ internal fun TimerCard(modifier: Modifier = Modifier, content: @Composable Colum
     val shape = RoundedCornerShape(28.dp)
     Column(
         modifier.fillMaxWidth()
-            .background(Brush.linearGradient(listOf(colors.surface, colors.primaryContainer)), shape)
-            .border(1.dp, colors.outlineVariant, shape)
+            .background(colors.primaryContainer, shape)
             .padding(20.dp),
         verticalArrangement = Arrangement.spacedBy(15.dp),
         content = content

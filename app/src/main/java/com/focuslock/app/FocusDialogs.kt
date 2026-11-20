@@ -149,10 +149,10 @@ internal fun WorkspaceDialogs(activity: MainActivity, state: FocusSnapshot) {
         val next = confirmation.next
         var defer by remember(confirmation) { mutableStateOf(active != null && next != null) }
         val first = if (defer) next else active ?: next
-        FocusDialog("Confirm schedule", dismiss, { confirmation.apply(defer) }, "Save schedule") {
-            Column(Modifier.heightIn(max = dialogBodyHeight()).verticalScroll(rememberScrollState()),
+        FocusDialog("Check your first lock", dismiss, { confirmation.apply(defer) }, "Save schedule") {
+            Column(Modifier.weight(1f, fill = false).heightIn(max = dialogBodyHeight()).verticalScroll(rememberScrollState()),
                 verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                Caption("Check the start day and time, and make sure you can wait until the shown unlock time.")
+                Caption("Check when the lock starts and when you can use your phone again.")
                 if (!confirmation.enabled) {
                     Caption("This schedule stays off until you turn it on.")
                 }
@@ -162,10 +162,6 @@ internal fun WorkspaceDialogs(activity: MainActivity, state: FocusSnapshot) {
                         FilterChip(defer, { defer = true }, label = { Text("Next occurrence") })
                         FilterChip(!defer, { defer = false }, label = { Text("Start now") })
                     }
-                }
-                if (active != null && !defer) {
-                    Text("Saving will lock your phone immediately.", color = MaterialTheme.colorScheme.error,
-                        style = MaterialTheme.typography.bodyMedium)
                 }
                 if (confirmation.continuous) {
                     Text("This schedule runs every day without a planned gap between locks.",
@@ -179,13 +175,14 @@ internal fun WorkspaceDialogs(activity: MainActivity, state: FocusSnapshot) {
                         else -> "Next occurrence"
                     }
                     SchedulePreviewCard(activity, title, it, startsNow)
-                    if (it.release != 0L && it.release > it.window.end) {
-                        Caption("Another scheduled lock keeps your phone locked past this window.")
-                    }
                 }
                 if (active != null && !defer && next != null) {
                     SchedulePreviewCard(activity, "Next occurrence", next)
                 }
+            }
+            if (confirmation.enabled && active != null && !defer) {
+                Text("Saving will lock your phone immediately.", color = MaterialTheme.colorScheme.error,
+                    style = MaterialTheme.typography.bodyMedium)
             }
         }
     }
@@ -519,26 +516,30 @@ private fun ScheduleDialog(activity: MainActivity, rule: Rule) {
 @Composable
 private fun ScheduleDayPicker(days: Int, onChange: (Int) -> Unit) {
     val colors = MaterialTheme.colorScheme
-    FlowRow(
-        Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.spacedBy(6.dp),
-        verticalArrangement = Arrangement.spacedBy(6.dp),
-        maxItemsInEachRow = 4
-    ) {
-        focusDays.forEachIndexed { index, day ->
-            val bit = 1 shl index
-            val selected = days and bit != 0
-            Surface(
-                checked = selected,
-                onCheckedChange = { onChange(days xor bit) },
-                modifier = Modifier.weight(1f).heightIn(min = 48.dp).semantics { role = Role.Checkbox },
-                shape = RoundedCornerShape(10.dp),
-                color = if (selected) colors.primaryContainer else colors.surfaceContainer,
-                contentColor = if (selected) colors.onPrimaryContainer else colors.onSurfaceVariant
-            ) {
-                Box(Modifier.padding(horizontal = 4.dp, vertical = 8.dp), contentAlignment = Alignment.Center) {
-                    Text(day, style = MaterialTheme.typography.labelMedium,
-                        fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal)
+    val density = androidx.compose.ui.platform.LocalDensity.current
+    val diameter = with(density) { 48.dp * fontScale.coerceAtLeast(1f) }
+    BoxWithConstraints(Modifier.fillMaxWidth()) {
+        val gap = 6.dp
+        val perRow = if (maxWidth >= diameter * 7 + gap * 6) 7
+            else ((maxWidth + gap) / (diameter + gap)).toInt().coerceIn(1, 4)
+        Column(Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(gap)) {
+            focusDays.indices.chunked(perRow).forEach { weekRow ->
+                Row(horizontalArrangement = Arrangement.spacedBy(gap)) {
+                    weekRow.forEach { index ->
+                        val bit = 1 shl index
+                        val selected = days and bit != 0
+                        Surface(checked = selected, onCheckedChange = { onChange(days xor bit) },
+                            modifier = Modifier.size(diameter).semantics { role = Role.Checkbox },
+                            shape = androidx.compose.foundation.shape.CircleShape,
+                            color = if (selected) colors.primary else colors.surfaceContainer,
+                            contentColor = if (selected) colors.onPrimary else colors.onSurfaceVariant) {
+                            Box(contentAlignment = Alignment.Center) {
+                                Text(focusDays[index], style = MaterialTheme.typography.labelLarge,
+                                    fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal)
+                            }
+                        }
+                    }
                 }
             }
         }
@@ -547,24 +548,23 @@ private fun ScheduleDayPicker(days: Int, onChange: (Int) -> Unit) {
 
 @Composable
 private fun SchedulePreviewCard(activity: MainActivity, title: String, preview: SchedulePreview, startsNow: Boolean = false) {
+    val start = preview.window.start
+    val end = preview.window.end
+    val startLabel = if (startsNow) "Now" else activity.dateLabel(start)
+    val endLabel = ClockLabels.unlockTime(end, start, activity.use24Hour)
     GroupCard {
-        Column(Modifier.fillMaxWidth().padding(14.dp), verticalArrangement = Arrangement.spacedBy(9.dp)) {
-            Text(title, style = MaterialTheme.typography.titleMedium)
-            SchedulePreviewLine("Starts", if (startsNow) "Now" else activity.dateLabel(preview.window.start))
-            if (preview.release != preview.window.end) {
-                SchedulePreviewLine("This lock ends", activity.dateLabel(preview.window.end))
+        Column(Modifier.fillMaxWidth().padding(14.dp), verticalArrangement = Arrangement.spacedBy(5.dp)) {
+            Caption(title)
+            Text("$startLabel to $endLabel", style = MaterialTheme.typography.titleMedium)
+            if (preview.release != end) {
+                HorizontalDivider()
+                val unlock = if (preview.release == 0L) "No unlock in the next 7 days"
+                    else "Phone unlocks at ${activity.dateLabel(preview.release)}"
+                Caption("Overlapping locks")
+                Text(unlock, style = MaterialTheme.typography.titleMedium,
+                    color = MaterialTheme.colorScheme.primary)
             }
-            SchedulePreviewLine("Phone unlocks", if (preview.release == 0L) "No gap in the next 7 days"
-                else activity.dateLabel(preview.release))
         }
-    }
-}
-
-@Composable
-private fun SchedulePreviewLine(label: String, value: String) {
-    Column {
-        Caption(label)
-        Text(value, style = MaterialTheme.typography.bodyLarge)
     }
 }
 
