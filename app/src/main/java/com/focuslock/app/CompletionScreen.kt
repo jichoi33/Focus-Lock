@@ -56,7 +56,8 @@ internal fun CompletionScreen(modes: Int, results: List<CompletedFocus>, onDone:
         else -> "Hard Lock and Soft Lock complete"
     }
     Box(
-        Modifier.fillMaxSize().background(Brush.verticalGradient(listOf(colors.primaryContainer, colors.background, colors.surfaceContainerLow))).safeDrawingPadding(),
+        Modifier.fillMaxSize().background(spectrumBrush())
+            .background(Brush.verticalGradient(listOf(colors.background.copy(alpha = 0.06f), colors.background.copy(alpha = 0.46f)))).safeDrawingPadding(),
         contentAlignment = Alignment.Center
     ) {
         Column(Modifier.widthIn(max = 420.dp).fillMaxSize().padding(horizontal = 28.dp, vertical = 20.dp)) {

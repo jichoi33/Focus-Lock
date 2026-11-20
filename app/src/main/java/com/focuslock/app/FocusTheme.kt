@@ -1,6 +1,12 @@
 package com.focuslock.app
 
-import android.os.Build
+import android.media.AudioAttributes
+import android.os.VibrationEffect
+import android.os.Vibrator
+import android.os.SystemClock
+import android.provider.Settings
+import androidx.compose.foundation.border
+import androidx.compose.ui.res.colorResource
 import android.view.HapticFeedbackConstants
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.graphics.Brush
@@ -121,12 +127,21 @@ internal fun GroupCard(modifier: Modifier = Modifier, content: @Composable Colum
 }
 
 @Composable
+internal fun spectrumBrush(): Brush = Brush.linearGradient(listOf(
+    colorResource(R.color.spectrum_mint), colorResource(R.color.spectrum_sky),
+    colorResource(R.color.spectrum_lilac), colorResource(R.color.spectrum_rose),
+    colorResource(R.color.spectrum_peach)
+))
+
+@Composable
 internal fun TimerCard(modifier: Modifier = Modifier, content: @Composable ColumnScope.() -> Unit) {
-    val colors = MaterialTheme.colorScheme
+    val sheen = if (isSystemInDarkTheme()) 0.08f else 0.28f
     val shape = RoundedCornerShape(28.dp)
     Column(
         modifier.fillMaxWidth()
-            .background(Brush.linearGradient(listOf(colors.primaryContainer, colors.secondaryContainer, colors.surfaceContainerLow)), shape)
+            .background(spectrumBrush(), shape)
+            .background(Brush.verticalGradient(listOf(Color.White.copy(alpha = sheen), Color.Transparent)), shape)
+            .border(1.dp, Color.White.copy(alpha = sheen + 0.15f), shape)
             .padding(20.dp),
         verticalArrangement = Arrangement.spacedBy(15.dp),
         content = content
@@ -152,7 +167,7 @@ internal fun DurationFields(value: DurationInput, onChange: (DurationInput) -> U
             }
         }
         Box(Modifier.widthIn(max = 320.dp).fillMaxWidth(), contentAlignment = Alignment.Center) {
-            Spacer(Modifier.fillMaxWidth().height(rowHeight).background(colors.primaryContainer, RoundedCornerShape(14.dp)))
+            Spacer(Modifier.fillMaxWidth().height(rowHeight).background(spectrumBrush(), RoundedCornerShape(14.dp)))
             Row(Modifier.fillMaxWidth()) {
                 DurationWheel("Hours", hours, 0..maximumHours, rowHeight, Modifier.weight(1f)) { next ->
                     onChange(DurationInput.of((next * 60 + minutes).coerceIn(1, Rule.DAY)))
@@ -178,11 +193,21 @@ private fun DurationWheel(label: String, value: Int, range: IntRange, rowHeight:
     val scope = rememberCoroutineScope()
     val view = LocalView.current
     LaunchedEffect(pager, view) {
+        val context = view.context
+        val motor = context.getSystemService(Vibrator::class.java)
+        val pulse = VibrationEffect.createOneShot(22, 220)
+        val touch = AudioAttributes.Builder().setUsage(AudioAttributes.USAGE_ASSISTANCE_SONIFICATION)
+            .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION).build()
+        var lastPulse = 0L
         snapshotFlow { pager.currentPage + range.first }.collect { selected ->
             if (selected != latestValue) {
-                val tick = if (Build.VERSION.SDK_INT >= 34) HapticFeedbackConstants.SEGMENT_TICK
-                    else HapticFeedbackConstants.CLOCK_TICK
-                view.performHapticFeedback(tick)
+                val now = SystemClock.uptimeMillis()
+                if (now - lastPulse >= 38 && view.isHapticFeedbackEnabled &&
+                    Settings.System.getInt(context.contentResolver, Settings.System.HAPTIC_FEEDBACK_ENABLED, 1) != 0) {
+                    if (motor?.hasVibrator() == true) motor.vibrate(pulse, touch)
+                    else view.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_PRESS)
+                    lastPulse = now
+                }
                 listener(selected)
             }
         }
