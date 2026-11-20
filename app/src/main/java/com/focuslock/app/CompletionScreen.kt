@@ -4,6 +4,10 @@ import android.animation.ValueAnimator
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
@@ -93,6 +97,12 @@ private fun CompletionMark() {
     val preview = LocalInspectionMode.current
     var hasPlayed by rememberSaveable { mutableStateOf(false) }
     val animateOnEntry = remember { !preview && !hasPlayed && ValueAnimator.areAnimatorsEnabled() }
+    val motionEnabled = !preview && ValueAnimator.areAnimatorsEnabled()
+    val pulse = if (motionEnabled) rememberInfiniteTransition(label = "Celebration").animateFloat(
+        initialValue = 0f, targetValue = 1f,
+        animationSpec = infiniteRepeatable(tween(2200, easing = FastOutSlowInEasing), RepeatMode.Reverse),
+        label = "Rings and sparks"
+    ) else null
     val progress = remember { Animatable(if (animateOnEntry) 0f else 1f) }
 
     LaunchedEffect(Unit) {
@@ -122,18 +132,19 @@ private fun CompletionMark() {
 
         onDrawBehind {
             val time = progress.value
+            val breath = pulse?.value ?: 0f
             val arrival = celebrationPhase(time, 0f, 0.48f)
             val ripple = celebrationPhase(time, 0.20f, 0.88f)
             drawCircle(glow, radius = unit * 0.5f, alpha = arrival)
             drawCircle(colors.primary.copy(alpha = 0.18f * ripple),
-                radius = unit * lerp(0.23f, 0.34f, ripple), style = ringStroke)
+                radius = unit * lerp(0.23f, 0.34f + 0.025f * breath, ripple), style = ringStroke)
             drawCircle(colors.primary.copy(alpha = 0.12f * ripple),
-                radius = unit * lerp(0.27f, 0.43f, ripple), style = ringStroke)
+                radius = unit * lerp(0.27f, 0.43f + 0.035f * breath, ripple), style = ringStroke)
 
             sparks.forEachIndexed { index, position ->
                 val spread = celebrationPhase(time, 0.34f + index * 0.06f, 0.86f + index * 0.06f)
-                val point = origin + (position * unit - origin) * lerp(0.56f, 1f, spread)
-                val arm = unit * (if (index == 1) 0.037f else 0.024f) * spread
+                val point = origin + (position * unit - origin) * lerp(0.56f, 1f + 0.055f * breath, spread)
+                val arm = unit * (if (index == 1) 0.037f else 0.024f) * spread * (1f + 0.25f * breath)
                 val tint = colors.primary.copy(alpha = (if (index == 1) 0.8f else 0.55f) * spread)
                 drawLine(tint, point - Offset(arm, 0f), point + Offset(arm, 0f), sparkStroke, StrokeCap.Round)
                 drawLine(tint, point - Offset(0f, arm), point + Offset(0f, arm), sparkStroke, StrokeCap.Round)

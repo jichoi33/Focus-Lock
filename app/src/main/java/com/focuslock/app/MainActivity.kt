@@ -142,6 +142,7 @@ class MainActivity : ComponentActivity() {
     internal var quickDuration by mutableStateOf(DurationInput())
     internal var softDuration by mutableStateOf(DurationInput())
     internal var allowlist by mutableStateOf(false)
+    internal var allowBrowserTabs by mutableStateOf(false)
     internal var strictSites by mutableStateOf(false)
     internal var returnHomeOnBlock by mutableStateOf(true)
     internal var blockedApps by mutableStateOf(emptySet<String>())
@@ -183,6 +184,7 @@ class MainActivity : ComponentActivity() {
         allowedApps = savedInstanceState?.getStringArrayList("allowed_apps")?.toSet() ?: softStore.selectedApps(true)
         blockedSites = savedInstanceState?.getStringArrayList("soft_sites")?.toSet() ?: softStore.blockedSites()
         strictSites = savedInstanceState?.getBoolean("unverifiable") ?: softStore.blockUnverifiable()
+        allowBrowserTabs = savedInstanceState?.getBoolean("allow_browser_tabs", session.allowBrowserTabs) ?: session.allowBrowserTabs
         val returnHomeDefault = softStore.returnHomeByDefault()
         returnHomeOnBlock = savedInstanceState?.getBoolean("return_home", returnHomeDefault) ?: returnHomeDefault
         allowlist = savedInstanceState?.getBoolean("allowlist") ?: session.allowlist
@@ -242,6 +244,7 @@ class MainActivity : ComponentActivity() {
         outState.putString("soft_minutes", softDuration.minutes)
         outState.putBoolean("allowlist", allowlist)
         outState.putBoolean("unverifiable", strictSites)
+        outState.putBoolean("allow_browser_tabs", allowBrowserTabs)
         outState.putBoolean("return_home", returnHomeOnBlock)
         outState.putStringArrayList("soft_apps", ArrayList(blockedApps))
         outState.putStringArrayList("allowed_apps", ArrayList(allowedApps))
@@ -489,6 +492,7 @@ class MainActivity : ComponentActivity() {
         }
         val usingAllowlist = allowlist
         val sites = if (usingAllowlist) emptySet() else blockedSites
+        val tabs = allowBrowserTabs
         val strict = strictSites
         val returnHome = returnHomeOnBlock
         val notice = if (LockNotifications.available(this, true)) "" else
@@ -500,9 +504,9 @@ class MainActivity : ComponentActivity() {
             if (requireSoftConnection() && SoftBlocker.activeTest() == null &&
                 !softStore.read().active(SystemClock.elapsedRealtime())) {
                 if (test) {
-                    SoftBlocker.startTest(apps, sites, strict, usingAllowlist, returnHome)
+                    SoftBlocker.startTest(apps, sites, strict, usingAllowlist, tabs, returnHome)
                 } else {
-                    softStore.start(minutes * Rule.MINUTE, apps, sites, strict, usingAllowlist, returnHome)
+                    softStore.start(minutes * Rule.MINUTE, apps, sites, strict, usingAllowlist, tabs, returnHome)
                 }
             }
         }

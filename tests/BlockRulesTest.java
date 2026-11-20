@@ -36,6 +36,12 @@ public final class BlockRulesTest {
                 "blocklist leaves unselected apps available");
         check(BlockRules.appBlocked("com.example.browser", true, Collections.emptySet(), essential),
                 "empty allowlist restricts all non-essential apps");
+        check(BlockRules.customTabActivity("org.chromium.chrome.browser.customtabs.CustomTabActivity"),
+                "Chromium custom tab receives the opt-in exception");
+        check(BlockRules.customTabActivity("org.mozilla.fenix.customtabs.ExternalAppBrowserActivity"),
+                "Firefox external app tab is recognized");
+        check(!BlockRules.customTabActivity("org.chromium.chrome.browser.ChromeTabbedActivity"),
+                "opening the standalone browser ends the exception");
         Set<String> changes = Set.of("com.example.browser", "com.example.home");
         check(BlockRules.tightenedApps(false, selected, changes).equals(Set.of("com.example.study", "com.example.browser", "com.example.home")),
                 "tightening a blocklist adds apps and retains existing blocks");

@@ -58,7 +58,13 @@ internal fun WorkspaceDialogs(activity: MainActivity, state: FocusSnapshot) {
                 GroupCard {
                     ActionRow(if (activity.allowlist) "Allowed apps" else "Blocked apps",
                         value = (if (activity.allowlist) activity.allowedApps.size else activity.blockedApps.size).toString()) { activity.sheet = "apps" }
-                    if (!activity.allowlist) {
+                    if (activity.allowlist) {
+                        InsetDivider()
+                        SwitchRow("Allow in-app browser tabs", activity.allowBrowserTabs, { activity.allowBrowserTabs = it })
+                        Box(Modifier.padding(start = 16.dp, end = 16.dp, bottom = 10.dp)) {
+                            Caption("Open links in supported browser tabs while keeping the full browser restricted.")
+                        }
+                    } else {
                         InsetDivider()
                         ActionRow("Blocked websites", value = activity.blockedSites.size.toString()) { activity.sheet = "sites" }
                         if (activity.blockedSites.isNotEmpty()) {

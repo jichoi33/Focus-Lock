@@ -18,6 +18,10 @@ final class BlockRules {
                 && (allowlist != selection.contains(id));
     }
 
+    static boolean customTabActivity(String name) {
+        return name.endsWith(".CustomTabActivity") || name.endsWith(".ExternalAppBrowserActivity");
+    }
+
     static Set<String> tightenedApps(boolean allowlist, Set<String> current, Set<String> apps) {
         Set<String> next = new HashSet<>(current);
         if (allowlist) next.removeAll(apps);

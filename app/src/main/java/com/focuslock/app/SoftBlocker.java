@@ -77,6 +77,8 @@ public final class SoftBlocker extends AccessibilityService {
     private KeyguardManager keyguard;
     private WindowManager windows;
     private BlockCover cover;
+    private String customTabPackage = "";
+    private int customTabWindow = -1;
     private int coveredWindowId = -1;
     private final BrowserNavigation navigation = new BrowserNavigation();
     private final CoverRelease release = new CoverRelease();
@@ -118,11 +120,11 @@ public final class SoftBlocker extends AccessibilityService {
     }
 
     static boolean startTest(Set<String> apps, Set<String> sites, boolean strict,
-                             boolean allowlist, boolean returnHome) {
+                             boolean allowlist, boolean allowBrowserTabs, boolean returnHome) {
         SoftBlocker service = connected;
         if (service == null || service.session.active(SystemClock.elapsedRealtime())) return false;
         service.test = new SoftStore.Session(new SessionClock(service).start(Rule.MINUTE),
-                apps, sites, strict, allowlist, returnHome, true);
+                apps, sites, strict, allowlist, allowBrowserTabs, returnHome, true);
         service.reload();
         reportChange();
         return true;
@@ -162,8 +164,9 @@ public final class SoftBlocker extends AccessibilityService {
         essentials = AppCatalog.essentials(this);
         homeApps = AppCatalog.homeApps(getPackageManager());
         settingsApps = AppCatalog.settingsApps(getPackageManager());
-        detectedBrowsers = session.allowlist || session.sites.isEmpty()
-                ? java.util.Collections.emptySet() : AppCatalog.browsers(this);
+        boolean inspectBrowsers = session.allowlist ? session.allowBrowserTabs : !session.sites.isEmpty();
+        detectedBrowsers = inspectBrowsers ? AppCatalog.browsers(this) : java.util.Collections.emptySet();
+        customTabWindow = -1;
         navigation.reset();
         breakUntil = EmergencyBreaks.current(this).until;
         LockNotifications.showSoft(this, session, breakUntil);
@@ -180,9 +183,19 @@ public final class SoftBlocker extends AccessibilityService {
             hideCover();
             return;
         }
-        if (queued) return;
         CharSequence source = event.getPackageName();
         int type = event.getEventType();
+        // A custom tab can hide its toolbar on scroll. Its activity still owns the same window.
+        if (session.allowlist && session.allowBrowserTabs && source != null
+                && type == AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED) {
+            String owner = source.toString();
+            String activity = String.valueOf(event.getClassName());
+            if (browser(owner) && activity.endsWith("Activity")) {
+                customTabWindow = BlockRules.customTabActivity(activity) ? event.getWindowId() : -1;
+                customTabPackage = owner;
+            }
+        }
+        if (queued) return;
         if (type != AccessibilityEvent.TYPE_WINDOWS_CHANGED
                 && type != AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED
                 && (source == null || getPackageName().contentEquals(source))) return;
@@ -243,7 +256,8 @@ public final class SoftBlocker extends AccessibilityService {
             boolean settingsBlocked = settingsApps.contains(id);
             if (settingsBlocked) {
                 reason = "Android Settings is blocked during a lock.";
-            } else if (softActive && BlockRules.appBlocked(id, session.allowlist, session.apps, essentials)) {
+            } else if (softActive && BlockRules.appBlocked(id, session.allowlist, session.apps, essentials)
+                    && !(session.allowlist && session.allowBrowserTabs && browser(id) && customTab(root, id))) {
                 reason = session.allowlist ? "This app is not on your allowlist." : "This app is blocked.";
             } else if (softActive && !session.allowlist && !session.sites.isEmpty() && browser(id)) {
                 site = true;
@@ -348,6 +362,14 @@ public final class SoftBlocker extends AccessibilityService {
     private boolean browser(String id) {
         return CHROMIUM.contains(id) || FIREFOX.contains(id) || BlockRules.SAMSUNG_INTERNET.equals(id)
                 || detectedBrowsers.contains(id);
+    }
+
+    private boolean customTab(AccessibilityNodeInfo root, String id) {
+        // Match browser-owned custom tab controls, never a generic address bar or page content.
+        return (customTabWindow >= 0 && root.getWindowId() == customTabWindow && id.equals(customTabPackage))
+                || hasVisibleView(root, id, "custom_tabs_toolbar")
+                || hasVisibleView(root, id, "custom_tabs_close_button")
+                || hasVisibleView(root, id, "mozac_feature_customtabs_close");
     }
 
     private Address browserAddress(AccessibilityNodeInfo root, String id) {

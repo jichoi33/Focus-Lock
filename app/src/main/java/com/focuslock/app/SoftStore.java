@@ -15,16 +15,18 @@ final class SoftStore {
         final Set<String> sites;
         final boolean blockUnverifiable;
         final boolean allowlist;
+        final boolean allowBrowserTabs;
         final boolean returnHome;
         final boolean test;
 
         Session(TimedDeadline timer, Set<String> apps, Set<String> sites, boolean blockUnverifiable,
-                boolean allowlist, boolean returnHome, boolean test) {
+                boolean allowlist, boolean allowBrowserTabs, boolean returnHome, boolean test) {
             this.timer = timer;
             this.apps = Collections.unmodifiableSet(new HashSet<>(apps));
             this.sites = Collections.unmodifiableSet(new HashSet<>(sites));
             this.blockUnverifiable = blockUnverifiable;
             this.allowlist = allowlist;
+            this.allowBrowserTabs = allowBrowserTabs;
             this.returnHome = returnHome;
             this.test = test;
         }
@@ -54,7 +56,7 @@ final class SoftStore {
                 prefs.getStringSet("apps", Collections.emptySet()),
                 prefs.getStringSet("sites", Collections.emptySet()),
                 prefs.getBoolean("unverifiable", false), prefs.getBoolean("allowlist", false),
-                prefs.getBoolean("return_home", false), false);
+                prefs.getBoolean("allow_browser_tabs", false), prefs.getBoolean("return_home", false), false);
     }
 
     Set<String> selectedApps(boolean allowlist) {
@@ -76,7 +78,7 @@ final class SoftStore {
     }
 
     void start(long duration, Set<String> apps, Set<String> sites, boolean blockUnverifiable,
-               boolean allowlist, boolean returnHome) {
+               boolean allowlist, boolean allowBrowserTabs, boolean returnHome) {
         Set<String> targets = new HashSet<>(apps);
         SharedPreferences.Editor edit = putDeadline(prefs.edit(), new SessionClock(context).start(duration))
                 .putBoolean("allowlist", allowlist)
@@ -85,6 +87,7 @@ final class SoftStore {
                 .putStringSet("apps", targets)
                 .putStringSet(allowlist ? "allow_apps" : "block_apps", new HashSet<>(targets));
         if (allowlist) {
+            edit.putBoolean("allow_browser_tabs", allowBrowserTabs);
             if (!prefs.contains("block_apps")) {
                 edit.putStringSet("block_apps", new HashSet<>(selectedApps(false)))
                         .putStringSet("block_sites", new HashSet<>(blockedSites()))

@@ -38,7 +38,8 @@ final class SessionCompletion {
     }
 
     String description(int mode) {
-        return prefs.getString(mode == HARD ? HARD_RESULT : SOFT_RESULT, "");
+        String name = prefs.getString(mode == HARD ? HARD_RESULT : SOFT_RESULT, "");
+        return mode == HARD && "Repeating lock".equalsIgnoreCase(name) ? "Hard Lock" : name;
     }
 
     long protectedMillis(int mode) {

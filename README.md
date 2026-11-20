@@ -39,7 +39,7 @@ Choose **Every day**, **Weekdays**, **Weekends**, or **Custom**. In Custom, tap 
 
 Hard Lock reapplies the system lock screen during calls. Android handles incoming and emergency calls on that screen. An active lock can also restrict access to Android Settings.
 
-Soft Lock reads the visible address bar in supported browsers to apply website rules. Strict mode can cover a browser if its address stays unreadable. Samsung Internet requires a verified address. Allowlist rules apply to the app itself, including any web views inside it.
+Soft Lock reads the visible address bar in supported browsers to apply website rules. Strict mode can cover a browser if its address stays unreadable. Samsung Internet requires a verified address. Web views embedded in an allowed app follow that app’s rule. To open links in supported browser-provided tabs, turn on **Soft Lock rules → Allow in-app browser tabs** before starting. This is off by default. Opening the full browser still requires adding it to the allowlist.
 
 If Android stops a scheduled Hard Lock from starting in the background, tap the failure notification to activate it while the scheduled window is open. The app attempts to resume active locks after reboot. Force-stopping the app, revoking permissions, changing the device clock, or manufacturer background restrictions can affect enforcement.
 
