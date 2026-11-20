@@ -12,6 +12,7 @@ import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.foundation.selection.toggleable
@@ -360,7 +361,7 @@ private fun BreaksDialog(activity: MainActivity, state: FocusSnapshot, close: ()
             }
             Caption(if (locked) "Change these limits after your session ends." else "Your session timer keeps running during a break.")
             if (enabled) {
-                Caption("During Soft Lock, tap Emergency break in Focus Lock or its notification. It also appears on the blocked screen when it stays open.")
+                Caption("During Soft Lock, tap Emergency break in Focus Lock or its expanded notification.")
                 Caption("During Hard Lock, expand its lock screen notification to find Emergency break.")
             }
         }
@@ -426,19 +427,50 @@ private fun AppPickerDialog(
     applySelection: (Set<String>) -> Unit
 ) {
     var selection by remember(title) { mutableStateOf(initialSelection) }
-    var query by remember { mutableStateOf("") }
-    val filtered = remember(query, applications) {
-        if (query.isBlank()) applications else applications.filter { entry ->
-            entry.label.contains(query.trim(), ignoreCase = true) || entry.id.contains(query.trim(), ignoreCase = true)
+    var selectedOnly by remember { mutableStateOf(false) }
+    var allQuery by remember { mutableStateOf("") }
+    var selectedQuery by remember { mutableStateOf("") }
+    val allListState = rememberLazyListState()
+    val selectedListState = rememberLazyListState()
+    val query = (if (selectedOnly) selectedQuery else allQuery).trim()
+    val allEntries = remember(applications, initialSelection) {
+        val ids = applications.mapTo(mutableSetOf()) { it.id }
+        // Keep older selections visible even if an app has been removed.
+        applications + (initialSelection - ids).sorted().map { AppCatalog.Entry(it, it) }
+    }
+    val entries = if (selectedOnly) allEntries else applications
+    val filtered = remember(entries, query, if (selectedOnly) selection else null) {
+        entries.filter { entry ->
+            (!selectedOnly || entry.id in selection) &&
+                (query.isEmpty() || entry.label.contains(query, ignoreCase = true) ||
+                    entry.id.contains(query, ignoreCase = true))
         }
     }
     val height = dialogBodyHeight()
     FocusDialog(title, close, { applySelection(selection) }, "$action (${selection.size})") {
-        OutlinedTextField(query, { query = it }, label = { Text("Search apps") },
-            singleLine = true, modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(14.dp))
-        if (filtered.isEmpty()) Caption("No apps match your search.")
-        else GroupCard {
-            LazyColumn(Modifier.heightIn(max = height.coerceAtMost(360.dp))) {
+        OutlinedTextField(
+            if (selectedOnly) selectedQuery else allQuery,
+            { if (selectedOnly) selectedQuery = it else allQuery = it },
+            label = { Text(if (selectedOnly) "Search selected apps" else "Search apps") },
+            singleLine = true, modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(14.dp)
+        )
+        FlowRow(Modifier.selectableGroup(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            FilterChip(selected = !selectedOnly, onClick = { selectedOnly = false },
+                modifier = Modifier.semantics { role = Role.RadioButton }, label = { Text("All apps") })
+            FilterChip(selected = selectedOnly, onClick = { selectedOnly = true },
+                modifier = Modifier.semantics { role = Role.RadioButton }, label = { Text("Selected (${selection.size})") })
+        }
+        if (filtered.isEmpty()) {
+            Caption(when {
+                selectedOnly && selection.isEmpty() -> "No apps selected yet."
+                query.isNotEmpty() -> "No apps match your search."
+                else -> "No apps available."
+            })
+        } else GroupCard(Modifier.weight(1f, fill = false)) {
+            LazyColumn(
+                state = if (selectedOnly) selectedListState else allListState,
+                modifier = Modifier.heightIn(max = height.coerceAtMost(360.dp))
+            ) {
                 items(filtered, key = { it.id }) { entry ->
                     val icon = remember(entry.id) {
                         runCatching { activity.packageManager.getApplicationIcon(entry.id).toBitmap(72, 72).asImageBitmap() }.getOrNull()

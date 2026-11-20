@@ -8,10 +8,13 @@ import android.content.Context;
 import android.content.Intent;
 import android.content.res.Configuration;
 import android.content.SharedPreferences;
+import android.content.pm.PackageManager;
+import android.content.res.ColorStateList;
 import android.graphics.PixelFormat;
 import android.graphics.Rect;
 import android.graphics.Typeface;
 import android.graphics.drawable.GradientDrawable;
+import android.graphics.drawable.RippleDrawable;
 import android.os.Handler;
 import android.os.Looper;
 import android.os.SystemClock;
@@ -26,6 +29,7 @@ import android.view.accessibility.AccessibilityWindowInfo;
 import android.widget.Button;
 import android.widget.ImageView;
 import android.widget.LinearLayout;
+import android.widget.ScrollView;
 import android.widget.TextView;
 
 import java.util.ArrayDeque;
@@ -85,7 +89,6 @@ public final class SoftBlocker extends AccessibilityService {
     private final CoverRelease release = new CoverRelease();
     private final AppReturn appReturn = new AppReturn();
     private long breakUntil;
-    private boolean breakAvailable;
     static void refreshBreak() {
         if (connected != null) connected.reload();
         reportChange();
@@ -169,18 +172,12 @@ public final class SoftBlocker extends AccessibilityService {
         detectedBrowsers = inspectBrowsers ? AppCatalog.browsers(this) : java.util.Collections.emptySet();
         customTabWindow = -1;
         navigation.reset();
-        updateBreakState();
+        breakUntil = EmergencyBreaks.current(this).until;
         LockNotifications.showSoft(this, session, breakUntil);
         handler.removeCallbacks(update);
         queued = false;
         release.reset();
         checkWindow();
-    }
-
-    private void updateBreakState() {
-        EmergencyBreaks breaks = EmergencyBreaks.current(this);
-        breakUntil = breaks.until;
-        breakAvailable = breaks.available(SystemClock.elapsedRealtime());
     }
 
     @Override public void onAccessibilityEvent(AccessibilityEvent event) {
@@ -221,7 +218,7 @@ public final class SoftBlocker extends AccessibilityService {
         }
         boolean hardActive = now < FocusService.settingsBlockedUntil;
         if (breakUntil > 0 && breakUntil <= now) {
-            updateBreakState();
+            breakUntil = EmergencyBreaks.current(this).until;
             LockNotifications.showSoft(this, session, breakUntil);
             reportChange();
         }
@@ -258,14 +255,16 @@ public final class SoftBlocker extends AccessibilityService {
             }
             String id = packageName.toString();
             int windowId = root.getWindowId();
-            String reason = null;
+            String title = null;
+            String reason = "";
             boolean site = false;
             boolean settingsBlocked = settingsApps.contains(id);
             if (settingsBlocked) {
-                reason = "Android Settings is blocked during a lock.";
+                title = "Android Settings is blocked";
             } else if (softActive && BlockRules.appBlocked(id, session.allowlist, session.apps, essentials)
                     && !(session.allowlist && session.allowBrowserTabs && browser(id) && customTab(root, id))) {
-                reason = session.allowlist ? "This app is not on your allowlist." : "This app is blocked.";
+                title = appBlockTitle(id);
+                if (session.allowlist) reason = "This app is outside your Allowlist.";
             } else if (softActive && !session.allowlist && !session.sites.isEmpty() && browser(id)) {
                 site = true;
                 Address address = browserAddress(root, id);
@@ -278,6 +277,7 @@ public final class SoftBlocker extends AccessibilityService {
                     if (BlockRules.blockUnreadableBrowser(id, session.blockUnverifiable)) {
                         long wait = navigation.unreadableDelay(id, windowId, now);
                         if (wait > 0 && !alreadyCovered) return Math.min(wait, IDLE_CHECK_MS);
+                        title = "Browser is blocked";
                         reason = "Focus Lock cannot read this browser's address bar.";
                     } else {
                         navigation.reset();
@@ -286,18 +286,27 @@ public final class SoftBlocker extends AccessibilityService {
                 } else if (!address.domain.isEmpty() && BlockRules.matches(address.domain, session.sites)) {
                     long wait = navigation.blockedHostDelay(id, windowId, address.domain, now);
                     if (!alreadyCovered && wait > 0) return wait;
-                    reason = address.domain + " is blocked.";
+                    title = address.domain + " is blocked";
                 } else {
                     navigation.reset();
                 }
             } else {
                 navigation.reset();
             }
-            if (reason != null) {
-                boolean autoReturn = !site && ((settingsBlocked && hardActive) || (softActive && session.returnHome));
+            if (title != null) {
+                // Keep a test cover available long enough to use its End test action.
+                boolean autoReturn = !site && ((settingsBlocked && hardActive)
+                        || (softActive && !session.test && session.returnHome));
                 if (!autoReturn) appReturn.reset();
                 long remaining = autoReturn ? appReturn.remaining(id, now) : Long.MAX_VALUE;
-                showCover(windowId, reason, site, remaining != Long.MAX_VALUE);
+                long end = settingsBlocked
+                        ? Math.max(session.timer.elapsedEnd, FocusService.settingsBlockedUntil)
+                        : session.timer.elapsedEnd;
+                showCover(windowId, title, reason, site, end, now);
+                if (cover != null && !site && !settingsBlocked) {
+                    cover.appPackage = id;
+                    cover.appTitle = title;
+                }
                 if (cover != null && remaining != Long.MAX_VALUE) {
                     if (remaining > 0) return Math.min(remaining, IDLE_CHECK_MS);
                     long current = SystemClock.elapsedRealtime();
@@ -307,7 +316,6 @@ public final class SoftBlocker extends AccessibilityService {
                         navigationUntil = current + NAVIGATION_SETTLE_MS;
                         return NAVIGATION_SETTLE_MS;
                     }
-                    cover.updateMessage(reason, site, false);
                 }
             } else {
                 if (cover != null && !release.confirmed(windowId, now)) return CoverRelease.CONFIRM_MS;
@@ -479,14 +487,32 @@ public final class SoftBlocker extends AccessibilityService {
         return domain.isEmpty() ? Address.UNKNOWN : new Address(domain);
     }
 
-    private void showCover(int windowId, String text, boolean browser, boolean returning) {
+    private String appBlockTitle(String packageName) {
+        if (cover != null && packageName.equals(cover.appPackage)) return cover.appTitle;
+        String title;
+        try {
+            PackageManager packages = getPackageManager();
+            String label = packages.getApplicationLabel(packages.getApplicationInfo(packageName, 0)).toString().trim();
+            title = label.isEmpty() ? "App is blocked" : label + " is blocked";
+        } catch (PackageManager.NameNotFoundException unavailable) {
+            title = "App is blocked";
+        }
+        return title;
+    }
+
+    private void showCover(int windowId, String title, String reason, boolean site, long end, long now) {
         release.reset();
+        boolean testing = session.test && session.active(now);
+        long wallNow = System.currentTimeMillis();
+        long remaining = Math.max(0, end - SystemClock.elapsedRealtime());
+        String until = ClockLabels.unlockTime(wallNow + remaining, wallNow, ClockLabels.is24Hour(this));
         if (cover != null) {
             coveredWindowId = windowId;
-            cover.updateMessage(text, browser, returning);
+            cover.updateMessage(title, reason, until, site, testing);
             return;
         }
-        BlockCover layout = new BlockCover(text, browser, returning);
+        BlockCover layout = new BlockCover();
+        layout.updateMessage(title, reason, until, site, testing);
         WindowManager.LayoutParams params = new WindowManager.LayoutParams(
                 WindowManager.LayoutParams.MATCH_PARENT, WindowManager.LayoutParams.MATCH_PARENT,
                 WindowManager.LayoutParams.TYPE_ACCESSIBILITY_OVERLAY,
@@ -518,12 +544,6 @@ public final class SoftBlocker extends AccessibilityService {
         if (!performGlobalAction(GLOBAL_ACTION_HOME)) return false;
         detachCover();
         return true;
-    }
-
-    private void openEmergencyBreak() {
-        startActivity(LockNotifications.openSoftBreak(this).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK));
-        detachCover();
-        scheduleCoverCheck(NAVIGATION_SETTLE_MS);
     }
 
     private void scheduleCoverCheck(long delay) {
@@ -582,62 +602,60 @@ public final class SoftBlocker extends AccessibilityService {
         reportChange();
     }
 
-    private final class BlockCover extends LinearLayout {
+    private final class BlockCover extends ScrollView {
+        private final LinearLayout content;
         private final TextView heading;
+        private final TextView deadline;
         private final TextView detail;
         private final Button previous;
         private final Button home;
         private final Button stopTest;
-        private final Button emergency;
+        private Button primary;
+        private String appPackage;
+        private String appTitle;
 
-        BlockCover(String message, boolean showPrevious, boolean returning) {
+        BlockCover() {
             super(SoftBlocker.this);
+            setFillViewport(true);
             setFocusableInTouchMode(true);
-            setOrientation(VERTICAL);
-            setGravity(Gravity.CENTER);
             setClickable(true);
-            int padding = Math.round(28 * getResources().getDisplayMetrics().density);
-            setPadding(padding, padding, padding, padding);
 
-            int iconSize = padding * 2;
+            content = new LinearLayout(getContext());
+            content.setOrientation(LinearLayout.VERTICAL);
+            content.setGravity(Gravity.CENTER);
+            content.setPadding(dp(24), dp(28), dp(24), dp(28));
+            addView(content, new ScrollView.LayoutParams(
+                    ScrollView.LayoutParams.MATCH_PARENT, ScrollView.LayoutParams.WRAP_CONTENT));
+
             ImageView icon = new ImageView(getContext());
             icon.setImageResource(R.drawable.ic_focus);
-            addView(icon, new LayoutParams(iconSize, iconSize));
+            icon.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO);
+            content.addView(icon, new LinearLayout.LayoutParams(dp(48), dp(48)));
 
-            heading = new TextView(getContext());
-            heading.setTextSize(30);
+            heading = addText(28, 16);
             heading.setTypeface(Typeface.create("sans-serif-medium", Typeface.NORMAL));
-            heading.setGravity(Gravity.CENTER);
-            heading.setPadding(0, padding, 0, 0);
-            addView(heading);
+            if (android.os.Build.VERSION.SDK_INT >= 28) heading.setAccessibilityHeading(true);
+            deadline = addText(18, 6);
+            deadline.setTypeface(Typeface.create("sans-serif-medium", Typeface.NORMAL));
+            detail = addText(15, 8);
 
-            detail = new TextView(getContext());
-            detail.setTextSize(16);
-            detail.setGravity(Gravity.CENTER);
-            detail.setPadding(0, padding / 2, 0, padding);
-            addView(detail);
-
-            previous = addButton("Previous page", () -> leaveCover(GLOBAL_ACTION_BACK));
-            home = addButton("Go Home", () -> leaveCover(GLOBAL_ACTION_HOME));
-            stopTest = addButton("End test", SoftBlocker::endTest);
-            emergency = addButton("Emergency break", SoftBlocker.this::openEmergencyBreak);
-            updateMessage(message, showPrevious, returning);
-            updateAppearance(getResources().getConfiguration());
+            stopTest = addButton("End test", SoftBlocker::endTest, 24);
+            previous = addButton("Previous page", () -> leaveCover(GLOBAL_ACTION_BACK), 8);
+            home = addButton("Go Home", () -> leaveCover(GLOBAL_ACTION_HOME), 8);
         }
 
-        void updateMessage(String message, boolean showPrevious, boolean returning) {
-            boolean testing = session.test && session.active(SystemClock.elapsedRealtime());
-            String title = testing ? "Soft Lock test" : showPrevious ? "Website blocked" : "App blocked";
-            if (returning) message += " Returning to Home…";
-
-            boolean canBreak = !returning && !testing && breakAvailable && session.active(SystemClock.elapsedRealtime());
-            emergency.setVisibility(canBreak ? VISIBLE : GONE);
-            if (!title.contentEquals(heading.getText())) heading.setText(title);
-            int stopVisibility = testing ? VISIBLE : GONE;
-            if (stopTest.getVisibility() != stopVisibility) stopTest.setVisibility(stopVisibility);
-            if (!message.contentEquals(detail.getText())) detail.setText(message);
-            int visibility = showPrevious ? VISIBLE : GONE;
-            if (previous.getVisibility() != visibility) previous.setVisibility(visibility);
+        void updateMessage(String title, String reason, String until, boolean site, boolean testing) {
+            updateText(heading, title);
+            updateText(deadline, "Until " + until);
+            updateText(detail, testing ? (reason.isEmpty() ? "Soft Lock test" : "Soft Lock test\n" + reason) : reason);
+            detail.setVisibility(detail.length() == 0 ? GONE : VISIBLE);
+            stopTest.setVisibility(testing ? VISIBLE : GONE);
+            previous.setVisibility(site ? VISIBLE : GONE);
+            Button nextPrimary = testing ? stopTest : site ? previous : home;
+            if (primary != nextPrimary) {
+                primary = nextPrimary;
+                updateAppearance(getResources().getConfiguration());
+            }
         }
 
         void updateAppearance(Configuration configuration) {
@@ -645,17 +663,19 @@ public final class SoftBlocker extends AccessibilityService {
                     == Configuration.UI_MODE_NIGHT_YES;
             setBackgroundColor(dark ? 0xff11141b : 0xfff3f4f8);
             heading.setTextColor(dark ? 0xfff1f4fb : 0xff171b25);
+            deadline.setTextColor(dark ? 0xffa9c7ff : 0xff173f87);
             detail.setTextColor(dark ? 0xffbbc4d5 : 0xff555e70);
-            int buttonText = dark ? 0xff102e62 : 0xffffffff;
-            int buttonFill = dark ? 0xffa9c7ff : 0xff1659cd;
-            previous.setTextColor(buttonText);
-            home.setTextColor(buttonText);
-            stopTest.setTextColor(buttonText);
-            emergency.setTextColor(buttonText);
-            ((GradientDrawable) previous.getBackground()).setColor(buttonFill);
-            ((GradientDrawable) home.getBackground()).setColor(buttonFill);
-            ((GradientDrawable) stopTest.getBackground()).setColor(buttonFill);
-            ((GradientDrawable) emergency.getBackground()).setColor(buttonFill);
+            for (Button button : Arrays.asList(stopTest, previous, home)) {
+                boolean emphasized = button == primary;
+                int text = emphasized ? (dark ? 0xff102e62 : 0xffffffff) : (dark ? 0xffd5e4ff : 0xff173f87);
+                int fill = emphasized ? (dark ? 0xffa9c7ff : 0xff1659cd) : (dark ? 0xff243a5f : 0xffe9f1ff);
+                GradientDrawable shape = new GradientDrawable();
+                shape.setColor(fill);
+                shape.setCornerRadius(dp(16));
+                button.setTextColor(text);
+                button.setBackground(new RippleDrawable(ColorStateList.valueOf(dark ? 0x33ffffff : 0x26000000),
+                        shape, null));
+            }
         }
 
         @Override public boolean dispatchKeyEvent(KeyEvent event) {
@@ -668,22 +688,38 @@ public final class SoftBlocker extends AccessibilityService {
             return true;
         }
 
-        private Button addButton(String text, Runnable action) {
+        private TextView addText(int size, int topMargin) {
+            TextView view = new TextView(getContext());
+            view.setTextSize(size);
+            view.setGravity(Gravity.CENTER);
+            LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(
+                    LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT);
+            params.topMargin = dp(topMargin);
+            content.addView(view, params);
+            return view;
+        }
+
+        private Button addButton(String text, Runnable action, int topMargin) {
             Button button = new Button(getContext());
             button.setAllCaps(false);
             button.setText(text);
             button.setElevation(0);
             button.setStateListAnimator(null);
-            float density = getResources().getDisplayMetrics().density;
-            button.setMinHeight(Math.round(48 * density));
-            GradientDrawable background = new GradientDrawable();
-            background.setCornerRadius(16 * density);
-            button.setBackground(background);
+            button.setMinHeight(dp(48));
             button.setOnClickListener(view -> action.run());
-            LayoutParams size = new LayoutParams(Math.round(208 * density), LayoutParams.WRAP_CONTENT);
-            size.topMargin = Math.round(6 * density);
-            addView(button, size);
+            LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(
+                    dp(224), LinearLayout.LayoutParams.WRAP_CONTENT);
+            params.topMargin = dp(topMargin);
+            content.addView(button, params);
             return button;
+        }
+
+        private int dp(int size) {
+            return Math.round(size * getResources().getDisplayMetrics().density);
+        }
+
+        private void updateText(TextView view, String text) {
+            if (!text.contentEquals(view.getText())) view.setText(text);
         }
     }
 }
