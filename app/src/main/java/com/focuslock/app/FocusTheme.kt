@@ -44,38 +44,44 @@ import androidx.compose.ui.unit.Dp
 import kotlinx.coroutines.launch
 import kotlin.math.abs
 import kotlin.math.roundToInt
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.ui.text.TextStyle
 
 private val light = lightColorScheme(
-    primary = Color(0xFF284DB9), onPrimary = Color.White,
-    primaryContainer = Color(0xFFDBE2FF), onPrimaryContainer = Color(0xFF102963),
-    secondary = Color(0xFF555E72), secondaryContainer = Color(0xFFE0E5F6), onSecondaryContainer = Color(0xFF282F41),
-    tertiary = Color(0xFF535F13), tertiaryContainer = Color(0xFFE2EE9B), onTertiaryContainer = Color(0xFF202900),
-    background = Color(0xFFF9F9FF), onBackground = Color(0xFF191B23),
-    surface = Color(0xFFF9F9FF), onSurface = Color(0xFF191B23),
-    surfaceVariant = Color(0xFFE1E3EF), onSurfaceVariant = Color(0xFF444753),
-    surfaceContainerLow = Color(0xFFF3F3FA), surfaceContainer = Color(0xFFEEEEF5),
-    surfaceContainerHigh = Color(0xFFE8E8EF), surfaceContainerHighest = Color(0xFFE2E2E9),
-    outline = Color(0xFF747783), outlineVariant = Color(0xFFC5C6D2)
+    primary = Color(0xFF1659CD), onPrimary = Color.White,
+    primaryContainer = Color(0xFFE9F1FF), onPrimaryContainer = Color(0xFF173F87),
+    background = Color(0xFFF3F4F8), onBackground = Color(0xFF171B25),
+    surface = Color.White, onSurface = Color(0xFF171B25),
+    surfaceVariant = Color(0xFFF1F3F8), onSurfaceVariant = Color(0xFF555E70),
+    surfaceContainer = Color(0xFFF6F7FA), surfaceContainerHighest = Color(0xFFE9EDF4),
+    outline = Color(0xFF767F90), outlineVariant = Color(0xFFE1E5EE)
 )
 private val dark = darkColorScheme(
-    primary = Color(0xFFB4C5FF), onPrimary = Color(0xFF0C2878),
-    primaryContainer = Color(0xFF263F80), onPrimaryContainer = Color(0xFFDCE3FF),
-    secondary = Color(0xFFBEC6DC), secondaryContainer = Color(0xFF3C4457), onSecondaryContainer = Color(0xFFDFE4F8),
-    tertiary = Color(0xFFC2D17C), tertiaryContainer = Color(0xFF394509), onTertiaryContainer = Color(0xFFE2EE9B),
-    background = Color(0xFF111319), onBackground = Color(0xFFE3E3EC),
-    surface = Color(0xFF111319), onSurface = Color(0xFFE3E3EC),
-    surfaceVariant = Color(0xFF434652), onSurfaceVariant = Color(0xFFC5C6D2),
-    surfaceContainerLow = Color(0xFF191B22), surfaceContainer = Color(0xFF1D1F26),
-    surfaceContainerHigh = Color(0xFF282A31), surfaceContainerHighest = Color(0xFF33353C),
-    outline = Color(0xFF8E909D), outlineVariant = Color(0xFF444753)
+    primary = Color(0xFFA9C7FF), onPrimary = Color(0xFF102E62),
+    primaryContainer = Color(0xFF243A5F), onPrimaryContainer = Color(0xFFD5E4FF),
+    background = Color(0xFF11141B), onBackground = Color(0xFFF1F4FB),
+    surface = Color(0xFF1B202A), onSurface = Color(0xFFF1F4FB),
+    surfaceVariant = Color(0xFF242B37), onSurfaceVariant = Color(0xFFBBC4D5),
+    surfaceContainer = Color(0xFF202632), surfaceContainerHighest = Color(0xFF2D3644),
+    outline = Color(0xFF969EAC), outlineVariant = Color(0xFF343D4F)
+)
+private val focusType = Typography(
+    headlineLarge = TextStyle(fontSize = 34.sp, lineHeight = 42.sp, letterSpacing = (-0.9).sp, fontWeight = FontWeight.Bold),
+    headlineSmall = TextStyle(fontSize = 24.sp, lineHeight = 32.sp, letterSpacing = (-0.5).sp, fontWeight = FontWeight.SemiBold),
+    titleLarge = TextStyle(fontSize = 20.sp, lineHeight = 27.sp, letterSpacing = (-0.3).sp, fontWeight = FontWeight.SemiBold),
+    titleMedium = TextStyle(fontSize = 16.sp, lineHeight = 22.sp, fontWeight = FontWeight.SemiBold),
+    bodyLarge = TextStyle(fontSize = 16.sp, lineHeight = 24.sp),
+    bodyMedium = TextStyle(fontSize = 14.sp, lineHeight = 21.sp),
+    bodySmall = TextStyle(fontSize = 13.sp, lineHeight = 19.sp),
+    labelLarge = TextStyle(fontSize = 15.sp, lineHeight = 21.sp, fontWeight = FontWeight.SemiBold),
+    labelMedium = TextStyle(fontSize = 13.sp, lineHeight = 18.sp, fontWeight = FontWeight.Medium)
 )
 
-@OptIn(ExperimentalMaterial3ExpressiveApi::class)
 @Composable
 internal fun FocusTheme(content: @Composable () -> Unit) {
     val colors = if (isSystemInDarkTheme()) dark else light
-    MaterialExpressiveTheme(colorScheme = colors) {
-        CompositionLocalProvider(LocalContentColor provides colors.onSurface, content = content)
+    MaterialTheme(colorScheme = colors, typography = focusType) {
+        CompositionLocalProvider(LocalContentColor provides colors.onBackground, content = content)
     }
 }
 
@@ -108,19 +114,23 @@ internal fun GroupCard(modifier: Modifier = Modifier, content: @Composable Colum
     val colors = MaterialTheme.colorScheme
     Surface(
         modifier = modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(20.dp),
-        color = colors.surfaceContainerLow,
-        tonalElevation = 0.dp
+        shape = RoundedCornerShape(23.dp),
+        color = colors.surface,
+        border = BorderStroke(1.dp, colors.outlineVariant)
     ) { Column(content = content) }
 }
 
 @Composable
 internal fun TimerCard(modifier: Modifier = Modifier, content: @Composable ColumnScope.() -> Unit) {
-    Surface(modifier.fillMaxWidth(), shape = MaterialTheme.shapes.extraLarge,
-        color = MaterialTheme.colorScheme.primaryContainer,
-        contentColor = MaterialTheme.colorScheme.onPrimaryContainer) {
-        Column(Modifier.padding(24.dp), verticalArrangement = Arrangement.spacedBy(16.dp), content = content)
-    }
+    val colors = MaterialTheme.colorScheme
+    val shape = RoundedCornerShape(28.dp)
+    Column(
+        modifier.fillMaxWidth()
+            .background(colors.primaryContainer, shape)
+            .padding(20.dp),
+        verticalArrangement = Arrangement.spacedBy(15.dp),
+        content = content
+    )
 }
 
 @Composable
@@ -227,12 +237,9 @@ private fun DurationWheel(label: String, value: Int, range: IntRange, rowHeight:
 internal fun Caption(text: String, modifier: Modifier = Modifier) =
     Text(text, modifier, color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall)
 
-@OptIn(ExperimentalMaterial3ExpressiveApi::class)
 @Composable
 internal fun PrimaryButton(label: String, onClick: () -> Unit, modifier: Modifier = Modifier) {
-    val height = ButtonDefaults.MediumContainerHeight
-    Button(onClick = onClick, modifier = modifier.fillMaxWidth().heightIn(min = height), shapes = ButtonDefaults.shapesFor(height),
-        contentPadding = ButtonDefaults.contentPaddingFor(height)) {
-        Text(label, style = ButtonDefaults.textStyleFor(height))
+    Button(onClick, modifier.fillMaxWidth().heightIn(min = 50.dp), shape = RoundedCornerShape(15.dp)) {
+        Text(label)
     }
 }

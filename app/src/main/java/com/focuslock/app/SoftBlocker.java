@@ -622,7 +622,7 @@ public final class SoftBlocker extends AccessibilityService {
 
             content = new LinearLayout(getContext());
             content.setOrientation(LinearLayout.VERTICAL);
-            content.setGravity(Gravity.CENTER_VERTICAL | Gravity.START);
+            content.setGravity(Gravity.CENTER);
             content.setPadding(dp(24), dp(28), dp(24), dp(28));
             addView(content, new ScrollView.LayoutParams(
                     ScrollView.LayoutParams.MATCH_PARENT, ScrollView.LayoutParams.WRAP_CONTENT));
@@ -632,7 +632,7 @@ public final class SoftBlocker extends AccessibilityService {
             icon.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO);
             content.addView(icon, new LinearLayout.LayoutParams(dp(48), dp(48)));
 
-            heading = addText(34, 24);
+            heading = addText(28, 16);
             heading.setTypeface(Typeface.create("sans-serif-medium", Typeface.NORMAL));
             if (android.os.Build.VERSION.SDK_INT >= 28) heading.setAccessibilityHeading(true);
             deadline = addText(18, 6);
@@ -661,17 +661,17 @@ public final class SoftBlocker extends AccessibilityService {
         void updateAppearance(Configuration configuration) {
             boolean dark = (configuration.uiMode & Configuration.UI_MODE_NIGHT_MASK)
                     == Configuration.UI_MODE_NIGHT_YES;
-            setBackgroundColor(dark ? 0xff111319 : 0xfff9f9ff);
-            heading.setTextColor(dark ? 0xffe3e3ec : 0xff191b23);
-            deadline.setTextColor(dark ? 0xffb4c5ff : 0xff102963);
-            detail.setTextColor(dark ? 0xffc5c6d2 : 0xff444753);
+            setBackgroundColor(dark ? 0xff11141b : 0xfff3f4f8);
+            heading.setTextColor(dark ? 0xfff1f4fb : 0xff171b25);
+            deadline.setTextColor(dark ? 0xffa9c7ff : 0xff173f87);
+            detail.setTextColor(dark ? 0xffbbc4d5 : 0xff555e70);
             for (Button button : Arrays.asList(stopTest, previous, home)) {
                 boolean emphasized = button == primary;
-                int text = emphasized ? (dark ? 0xff0c2878 : 0xffffffff) : (dark ? 0xffdce3ff : 0xff102963);
-                int fill = emphasized ? (dark ? 0xffb4c5ff : 0xff284db9) : (dark ? 0xff263f80 : 0xffdbe2ff);
+                int text = emphasized ? (dark ? 0xff102e62 : 0xffffffff) : (dark ? 0xffd5e4ff : 0xff173f87);
+                int fill = emphasized ? (dark ? 0xffa9c7ff : 0xff1659cd) : (dark ? 0xff243a5f : 0xffe9f1ff);
                 GradientDrawable shape = new GradientDrawable();
                 shape.setColor(fill);
-                shape.setCornerRadius(dp(28));
+                shape.setCornerRadius(dp(16));
                 button.setTextColor(text);
                 button.setBackground(new RippleDrawable(ColorStateList.valueOf(dark ? 0x33ffffff : 0x26000000),
                         shape, null));
@@ -691,7 +691,7 @@ public final class SoftBlocker extends AccessibilityService {
         private TextView addText(int size, int topMargin) {
             TextView view = new TextView(getContext());
             view.setTextSize(size);
-            view.setGravity(Gravity.START);
+            view.setGravity(Gravity.CENTER);
             LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(
                     LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT);
             params.topMargin = dp(topMargin);
@@ -708,7 +708,7 @@ public final class SoftBlocker extends AccessibilityService {
             button.setMinHeight(dp(48));
             button.setOnClickListener(view -> action.run());
             LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(
-                    LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT);
+                    dp(224), LinearLayout.LayoutParams.WRAP_CONTENT);
             params.topMargin = dp(topMargin);
             content.addView(button, params);
             return button;

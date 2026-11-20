@@ -58,11 +58,8 @@ internal fun WorkspaceDialogs(activity: MainActivity, state: FocusSnapshot) {
             }) {
                 Column(Modifier.weight(1f, fill = false).verticalScroll(rememberScrollState()),
                     verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                    key(presetRevision) {
-                        DurationFields(value) { value = it }
-                    }
                     FlowRow(
-                        modifier = Modifier.align(Alignment.CenterHorizontally).selectableGroup(),
+                        modifier = Modifier.selectableGroup(),
                         horizontalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
                         listOf(15, 30, 60).forEach { minutes ->
@@ -73,16 +70,12 @@ internal fun WorkspaceDialogs(activity: MainActivity, state: FocusSnapshot) {
                                     // Replace the wheels so a previous fling cannot override the preset.
                                     presetRevision++
                                 },
-                                label = { Text(durationLabel(minutes)) },
-                                shape = RoundedCornerShape(50),
-                                border = null,
-                                colors = FilterChipDefaults.filterChipColors(
-                                    containerColor = MaterialTheme.colorScheme.surfaceContainer,
-                                    selectedContainerColor = MaterialTheme.colorScheme.primaryContainer,
-                                    selectedLabelColor = MaterialTheme.colorScheme.onPrimaryContainer
-                                )
+                                label = { Text(durationLabel(minutes)) }
                             )
                         }
+                    }
+                    key(presetRevision) {
+                        DurationFields(value) { value = it }
                     }
                 }
             }
@@ -275,18 +268,11 @@ internal fun FocusDialog(
     Dialog(onDismissRequest = onDismiss, properties = DialogProperties(usePlatformDefaultWidth = false)) {
         Box(Modifier.fillMaxWidth().padding(horizontal = 20.dp), contentAlignment = Alignment.Center) {
             Surface(Modifier.widthIn(max = 480.dp).fillMaxWidth(),
-                color = MaterialTheme.colorScheme.surfaceContainerHigh, shape = MaterialTheme.shapes.extraLarge) {
+                color = MaterialTheme.colorScheme.surface, shape = RoundedCornerShape(27.dp)) {
                 Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(13.dp)) {
                     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                         Text(title, Modifier.weight(1f), style = MaterialTheme.typography.headlineSmall)
-                        IconButton(onClick = onDismiss) {
-                            Surface(shape = androidx.compose.foundation.shape.CircleShape,
-                                color = MaterialTheme.colorScheme.surfaceContainer) {
-                                Box(Modifier.size(32.dp), contentAlignment = Alignment.Center) {
-                                    Symbol("Close", "Close", Modifier.size(16.dp))
-                                }
-                            }
-                        }
+                        IconButton(onClick = onDismiss) { Symbol("Close", "Close") }
                     }
                     content()
                     if (onConfirm != null) PrimaryButton(confirmLabel, onConfirm)
@@ -650,7 +636,6 @@ private fun ScheduleDialog(activity: MainActivity, rule: Rule) {
     }
 }
 
-@OptIn(ExperimentalMaterial3ExpressiveApi::class)
 @Composable
 private fun ScheduleDayPresets(selected: Int?, onSelect: (Int?) -> Unit) {
     val fontScale = LocalDensity.current.fontScale
@@ -661,11 +646,12 @@ private fun ScheduleDayPresets(selected: Int?, onSelect: (Int?) -> Unit) {
             choices.chunked(columns).forEach { row ->
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     row.forEach { (mask, label) ->
-                        ToggleButton(
-                            checked = selected == mask,
-                            onCheckedChange = { onSelect(mask) },
-                            modifier = Modifier.weight(1f).heightIn(min = 48.dp).semantics { role = Role.RadioButton }
-                        ) { Text(label) }
+                        FilterChip(
+                            selected = selected == mask,
+                            onClick = { onSelect(mask) },
+                            modifier = Modifier.weight(1f).heightIn(min = 48.dp).semantics { role = Role.RadioButton },
+                            label = { Text(label) }
+                        )
                     }
                 }
             }

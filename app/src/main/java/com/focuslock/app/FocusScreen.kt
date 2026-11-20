@@ -3,6 +3,7 @@ package com.focuslock.app
 import android.os.SystemClock
 
 import androidx.activity.compose.BackHandler
+import androidx.compose.animation.animateColorAsState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -47,15 +48,14 @@ internal fun FocusWorkspace(activity: MainActivity) {
             WorkspaceHeader(Modifier.padding(start = 24.dp, end = 20.dp, top = 8.dp, bottom = 8.dp)) {
                 activity.sheet = "settings"
             }
+            ModeControl(activity.mode, { activity.mode = it }, Modifier.padding(horizontal = 24.dp),
+                showHelp = !state.admin && !state.accessibility)
             key(activity.mode) {
                 Column(
                     Modifier.weight(1f).fillMaxWidth().verticalScroll(rememberScrollState())
                         .padding(start = 24.dp, end = 24.dp, top = 19.dp, bottom = 28.dp),
                     verticalArrangement = Arrangement.spacedBy(14.dp)
                 ) {
-                    if (!state.admin && !state.accessibility) {
-                        Caption(if (activity.mode == FocusMode.Hard) "Lock the whole phone" else "Block apps and sites")
-                    }
                     if (activity.mode == FocusMode.Hard) HardWorkspace(activity, state)
                     else SoftWorkspace(activity, state)
                     GroupCard {
@@ -65,7 +65,6 @@ internal fun FocusWorkspace(activity: MainActivity) {
                     }
                 }
             }
-            ModeControl(activity.mode, { activity.mode = it })
         }
     }
     WorkspaceDialogs(activity, state)
@@ -83,7 +82,7 @@ internal fun FocusWorkspace(activity: MainActivity) {
 private fun WorkspaceHeader(modifier: Modifier = Modifier, onSettings: () -> Unit) {
     val colors = MaterialTheme.colorScheme
     Row(modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-        Text("Focus Lock", Modifier.weight(1f), style = MaterialTheme.typography.headlineMedium)
+        Text("Focus Lock", Modifier.weight(1f), style = MaterialTheme.typography.headlineSmall)
         Surface(shape = RoundedCornerShape(16.dp), color = colors.surface) {
             IconButton(onClick = onSettings, modifier = Modifier.size(48.dp)) {
                 Symbol("Sliders", "Settings", tint = colors.onSurfaceVariant)
@@ -93,12 +92,34 @@ private fun WorkspaceHeader(modifier: Modifier = Modifier, onSettings: () -> Uni
 }
 
 @Composable
-private fun ModeControl(mode: FocusMode, onChange: (FocusMode) -> Unit) {
-    NavigationBar(windowInsets = WindowInsets(0), containerColor = MaterialTheme.colorScheme.surfaceContainer) {
+private fun ModeControl(mode: FocusMode, onChange: (FocusMode) -> Unit, modifier: Modifier = Modifier,
+                        showHelp: Boolean = false) {
+    val colors = MaterialTheme.colorScheme
+    Row(
+        modifier.fillMaxWidth().background(colors.surfaceContainerHighest, RoundedCornerShape(15.dp))
+            .padding(4.dp).selectableGroup(),
+        horizontalArrangement = Arrangement.spacedBy(3.dp)
+    ) {
         FocusMode.entries.forEach { item ->
-            NavigationBarItem(selected = mode == item, onClick = { onChange(item) },
-                icon = { Symbol(if (item == FocusMode.Hard) "Lock" else "Grid") },
-                label = { Text(item.label) })
+            val selected = mode == item
+            val fill by animateColorAsState(if (selected) colors.surface else colors.surfaceContainerHighest,
+                label = "selected mode")
+            Surface(Modifier.weight(1f), color = fill, shape = RoundedCornerShape(12.dp),
+                shadowElevation = if (selected) 1.dp else 0.dp) {
+                Box(
+                    Modifier.selectable(selected = selected, role = Role.Tab, onClick = { onChange(item) })
+                        .heightIn(min = 44.dp).padding(vertical = 7.dp, horizontal = 4.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        Text(item.label, style = MaterialTheme.typography.labelLarge,
+                            color = if (selected) colors.onSurface else colors.onSurfaceVariant)
+                        if (showHelp) Text(if (item == FocusMode.Hard) "Lock the whole phone" else "Block apps and sites",
+                            style = MaterialTheme.typography.labelSmall, color = colors.onSurfaceVariant,
+                            textAlign = androidx.compose.ui.text.style.TextAlign.Center)
+                    }
+                }
+            }
         }
     }
 }
@@ -215,7 +236,8 @@ private fun SessionCard(duration: DurationInput, edit: () -> Unit, label: String
                 Column(Modifier.weight(1f)) {
                     Caption("Duration")
                     Text(durationLabel(duration.total ?: 30),
-                        style = MaterialTheme.typography.displayMedium.copy(fontWeight = FontWeight.SemiBold, fontFeatureSettings = "'tnum'"))
+                        style = TextStyle(fontSize = 48.sp, lineHeight = 54.sp, letterSpacing = (-2).sp,
+                            fontWeight = FontWeight.Medium, fontFeatureSettings = "'tnum'"))
                 }
                 Text("Edit", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary)
             }
@@ -458,11 +480,10 @@ private fun HomePreview() {
         Surface(color = MaterialTheme.colorScheme.background) {
             Column(Modifier.fillMaxSize().padding(24.dp), verticalArrangement = Arrangement.spacedBy(18.dp)) {
                 WorkspaceHeader {}
+                ModeControl(FocusMode.Hard, {})
                 SessionCard(DurationInput(), {}, "Start Hard Lock", {})
                 ScheduleHeading {}
                 Caption("Add a one-time or repeating lock.")
-                Spacer(Modifier.weight(1f))
-                ModeControl(FocusMode.Hard, {})
             }
         }
     }
@@ -475,14 +496,13 @@ private fun AllowlistPreview() {
         Surface(color = MaterialTheme.colorScheme.background) {
             Column(Modifier.fillMaxSize().padding(24.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
                 WorkspaceHeader {}
+                ModeControl(FocusMode.Soft, {})
                 SessionCard(DurationInput(), {}, "Start Soft Lock", {}) {
                     HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
                     Text("Allowlist", style = MaterialTheme.typography.titleMedium)
                     Caption("Essential apps only")
                 }
                 TextButton(onClick = {}, modifier = Modifier.fillMaxWidth()) { Text("Test for 1 minute") }
-                Spacer(Modifier.weight(1f))
-                ModeControl(FocusMode.Soft, {})
             }
         }
     }
