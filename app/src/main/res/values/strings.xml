@@ -5,10 +5,10 @@
     <string name="soft_accessibility_desc">During Soft Lock, Focus Lock checks the foreground app and the address bar in compatible browsers. Visited addresses are not stored or sent.</string>
     <style name="AppTheme" parent="android:style/Theme.Material.Light.NoActionBar">
         <item name="android:fontFamily">sans</item>
-        <item name="android:colorAccent">#1659CD</item>
-        <item name="android:windowBackground">#F3F4F8</item>
-        <item name="android:statusBarColor">#F3F4F8</item>
-        <item name="android:navigationBarColor">#F3F4F8</item>
+        <item name="android:colorAccent">#176552</item>
+        <item name="android:windowBackground">#F6F5F1</item>
+        <item name="android:statusBarColor">#F6F5F1</item>
+        <item name="android:navigationBarColor">#F6F5F1</item>
         <item name="android:windowLightStatusBar">true</item>
         <item name="android:windowLightNavigationBar">true</item>
     </style>

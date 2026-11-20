@@ -7,7 +7,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
+import androidx.compose.material3.FilterChip
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
@@ -76,13 +76,12 @@ internal fun StatisticsDialog(activity: MainActivity, mode: FocusMode, close: ()
             Modifier.heightIn(max = 470.dp).verticalScroll(rememberScrollState()),
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                val range = if (allTime) "All time" else
-                    "${report.days.first().date.format(dateLabel)} – ${report.days.last().date.format(dateLabel)}"
-                Caption(range, Modifier.weight(1f))
-                TextButton(onClick = { allTime = !allTime }) {
-                    Text(if (allTime) "Last 7 days" else "All time")
-                }
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                FilterChip(selected = !allTime, onClick = { allTime = false }, label = { Text("Last 7 days") })
+                FilterChip(selected = allTime, onClick = { allTime = true }, label = { Text("All time") })
+            }
+            if (!allTime) {
+                Caption("${report.days.first().date.format(dateLabel)} – ${report.days.last().date.format(dateLabel)}")
             }
             TimerCard {
                 Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {

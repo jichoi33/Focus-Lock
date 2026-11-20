@@ -1,9 +1,10 @@
 package com.focuslock.app
 
-import android.os.Build
-import android.widget.EditText
-import android.widget.NumberPicker
-import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.pager.PagerDefaults
+import androidx.compose.foundation.pager.PagerSnapDistance
+import androidx.compose.foundation.pager.VerticalPager
+import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.isSystemInDarkTheme
@@ -17,7 +18,7 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.StrokeJoin
-import androidx.compose.ui.graphics.toArgb
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.scale
 import androidx.compose.ui.graphics.vector.PathParser
@@ -28,25 +29,37 @@ import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.compose.ui.viewinterop.AndroidView
+import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.semantics.stateDescription
+import androidx.compose.ui.semantics.progressBarRangeInfo
+import androidx.compose.ui.semantics.ProgressBarRangeInfo
+import androidx.compose.ui.semantics.setProgress
+import androidx.compose.ui.unit.Dp
+import kotlinx.coroutines.launch
+import kotlin.math.abs
+import kotlin.math.roundToInt
 
 private val light = lightColorScheme(
-    primary = Color(0xFF1659CD), onPrimary = Color.White,
-    primaryContainer = Color(0xFFE9F1FF), onPrimaryContainer = Color(0xFF173F87),
-    background = Color(0xFFF3F4F8), onBackground = Color(0xFF171B25),
-    surface = Color.White, onSurface = Color(0xFF171B25),
-    surfaceVariant = Color(0xFFF1F3F8), onSurfaceVariant = Color(0xFF555E70),
-    surfaceContainer = Color(0xFFF6F7FA), surfaceContainerHighest = Color(0xFFE9EDF4),
-    outline = Color(0xFF767F90), outlineVariant = Color(0xFFE1E5EE)
+    primary = Color(0xFF176552), onPrimary = Color.White,
+    primaryContainer = Color(0xFFE0EFE7), onPrimaryContainer = Color(0xFF194A3D),
+    secondary = Color(0xFF52655A), secondaryContainer = Color(0xFFDCEAE0), onSecondaryContainer = Color(0xFF233B2F),
+    surfaceContainerLow = Color(0xFFF3F4EF), surfaceContainerHigh = Color(0xFFECEFE8),
+    background = Color(0xFFF6F5F1), onBackground = Color(0xFF202925),
+    surface = Color.White, onSurface = Color(0xFF202925),
+    surfaceVariant = Color(0xFFEEEFEA), onSurfaceVariant = Color(0xFF53615A),
+    surfaceContainer = Color(0xFFF1F2ED), surfaceContainerHighest = Color(0xFFE6EAE3),
+    outline = Color(0xFF737E76), outlineVariant = Color(0xFFDDE2DA)
 )
 private val dark = darkColorScheme(
-    primary = Color(0xFFA9C7FF), onPrimary = Color(0xFF102E62),
-    primaryContainer = Color(0xFF243A5F), onPrimaryContainer = Color(0xFFD5E4FF),
-    background = Color(0xFF11141B), onBackground = Color(0xFFF1F4FB),
-    surface = Color(0xFF1B202A), onSurface = Color(0xFFF1F4FB),
-    surfaceVariant = Color(0xFF242B37), onSurfaceVariant = Color(0xFFBBC4D5),
-    surfaceContainer = Color(0xFF202632), surfaceContainerHighest = Color(0xFF2D3644),
-    outline = Color(0xFF969EAC), outlineVariant = Color(0xFF343D4F)
+    primary = Color(0xFF8DD6B8), onPrimary = Color(0xFF09382A),
+    primaryContainer = Color(0xFF203B32), onPrimaryContainer = Color(0xFFCDEEDF),
+    secondary = Color(0xFFB3C9BA), secondaryContainer = Color(0xFF32463B), onSecondaryContainer = Color(0xFFDBEADC),
+    surfaceContainerLow = Color(0xFF1B221E), surfaceContainerHigh = Color(0xFF2C352F),
+    background = Color(0xFF131816), onBackground = Color(0xFFECF2EC),
+    surface = Color(0xFF1D2420), onSurface = Color(0xFFECF2EC),
+    surfaceVariant = Color(0xFF29312D), onSurfaceVariant = Color(0xFFB5C2B8),
+    surfaceContainer = Color(0xFF252D28), surfaceContainerHighest = Color(0xFF313B34),
+    outline = Color(0xFF93A198), outlineVariant = Color(0xFF39443E)
 )
 private val focusType = Typography(
     headlineLarge = TextStyle(fontSize = 34.sp, lineHeight = 42.sp, letterSpacing = (-0.9).sp, fontWeight = FontWeight.Bold),
@@ -97,9 +110,9 @@ internal fun GroupCard(modifier: Modifier = Modifier, content: @Composable Colum
     val colors = MaterialTheme.colorScheme
     Surface(
         modifier = modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(23.dp),
+        shape = RoundedCornerShape(20.dp),
         color = colors.surface,
-        border = BorderStroke(1.dp, colors.outlineVariant)
+        tonalElevation = 0.dp
     ) { Column(content = content) }
 }
 
@@ -125,72 +138,78 @@ internal fun DurationFields(value: DurationInput, onChange: (DurationInput) -> U
     val maximumHours = Rule.DAY / 60
     val minimumMinutes = if (hours == 0) 1 else 0
     val maximumMinutes = if (hours == maximumHours) 0 else 59
-    Surface(shape = RoundedCornerShape(17.dp), color = colors.surfaceContainer,
-        border = BorderStroke(1.dp, colors.outlineVariant)) {
-        Row(Modifier.fillMaxWidth().padding(horizontal = 10.dp, vertical = 10.dp),
-            verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-            DurationWheel("Hours", hours, 0..maximumHours, Modifier.weight(1f)) { nextHours ->
-                val nextMinutes = when (nextHours) {
-                    0 -> minutes.coerceAtLeast(1)
-                    maximumHours -> 0
-                    else -> minutes
+    val rowHeight = with(LocalDensity.current) { (36.sp.toDp() + 12.dp).coerceAtLeast(48.dp) }
+    Column(Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally) {
+        Row(Modifier.widthIn(max = 320.dp).fillMaxWidth()) {
+            for (label in listOf("Hours", "Minutes")) {
+                Box(Modifier.weight(1f), contentAlignment = Alignment.Center) {
+                    Text(label, style = MaterialTheme.typography.labelMedium, color = colors.onSurfaceVariant)
                 }
-                onChange(DurationInput.of(nextHours * 60 + nextMinutes))
             }
-            DurationWheel("Minutes", minutes, minimumMinutes..maximumMinutes, Modifier.weight(1f),
-                twoDigits = true) { nextMinutes ->
-                onChange(DurationInput.of(hours * 60 + nextMinutes))
+        }
+        Box(Modifier.widthIn(max = 320.dp).fillMaxWidth(), contentAlignment = Alignment.Center) {
+            Spacer(Modifier.fillMaxWidth().height(rowHeight).background(colors.primaryContainer, RoundedCornerShape(14.dp)))
+            Row(Modifier.fillMaxWidth()) {
+                DurationWheel("Hours", hours, 0..maximumHours, rowHeight, Modifier.weight(1f)) { next ->
+                    onChange(DurationInput.of((next * 60 + minutes).coerceIn(1, Rule.DAY)))
+                }
+                key(minimumMinutes, maximumMinutes) {
+                    DurationWheel("Minutes", minutes, minimumMinutes..maximumMinutes, rowHeight,
+                        Modifier.weight(1f), twoDigits = true) { next ->
+                        onChange(DurationInput.of(hours * 60 + next))
+                    }
+                }
             }
         }
     }
 }
 
 @Composable
-private fun DurationWheel(label: String, value: Int, range: IntRange, modifier: Modifier,
+private fun DurationWheel(label: String, value: Int, range: IntRange, rowHeight: Dp, modifier: Modifier,
                           twoDigits: Boolean = false, onValueChange: (Int) -> Unit) {
     val colors = MaterialTheme.colorScheme
-    val density = LocalDensity.current
-    val textSize = with(density) { 27.sp.toPx() }
-    val dividerHeight = with(density) { 1.dp.roundToPx() }
-    val wheelHeight = with(density) { (32.sp.toDp() * 3 + 16.dp).coerceAtLeast(132.dp) }
-    val listener = rememberUpdatedState(onValueChange)
-
-    Column(modifier, horizontalAlignment = Alignment.CenterHorizontally) {
-        Text(label, style = MaterialTheme.typography.labelLarge, color = colors.onSurfaceVariant)
-        AndroidView(
-            modifier = Modifier.fillMaxWidth().height(wheelHeight),
-            factory = { context ->
-                NumberPicker(context).apply {
-                    contentDescription = label
-                    descendantFocusability = NumberPicker.FOCUS_BLOCK_DESCENDANTS
-                    // Keep the native scroll and accessibility controls without opening the keyboard.
-                    for (index in 0 until childCount) {
-                        (getChildAt(index) as? EditText)?.apply {
-                            isFocusable = false
-                            isLongClickable = false
-                            showSoftInputOnFocus = false
-                        }
-                    }
-                    if (twoDigits) setFormatter { it.toString().padStart(2, '0') }
-                    setOnValueChangedListener { _, _, selected -> listener.value(selected) }
-                }
-            },
-            update = { picker ->
-                if (picker.minValue > range.last) picker.minValue = range.first
-                if (picker.maxValue != range.last) picker.maxValue = range.last
-                if (picker.minValue != range.first) picker.minValue = range.first
-                if (picker.wrapSelectorWheel) picker.wrapSelectorWheel = false
-                if (picker.value != value) picker.value = value
-                val enabled = range.first != range.last
-                if (picker.isEnabled != enabled) picker.isEnabled = enabled
-                if (Build.VERSION.SDK_INT >= 29) {
-                    val textColor = (if (enabled) colors.onSurface else colors.onSurfaceVariant).toArgb()
-                    if (picker.textColor != textColor) picker.textColor = textColor
-                    if (picker.textSize != textSize) picker.textSize = textSize
-                    if (picker.selectionDividerHeight != dividerHeight) picker.selectionDividerHeight = dividerHeight
+    val pager = rememberPagerState(initialPage = value - range.first) { range.last - range.first + 1 }
+    val listener by rememberUpdatedState(onValueChange)
+    val latestValue by rememberUpdatedState(value)
+    val scope = rememberCoroutineScope()
+    LaunchedEffect(pager) {
+        snapshotFlow { pager.currentPage + range.first }.collect { selected ->
+            if (selected != latestValue) listener(selected)
+        }
+    }
+    VerticalPager(
+        state = pager,
+        modifier = modifier.height(rowHeight * 3).clearAndSetSemantics {
+            contentDescription = label
+            stateDescription = value.toString()
+            if (range.first != range.last) {
+                progressBarRangeInfo = ProgressBarRangeInfo(value.toFloat(), range.first.toFloat()..range.last.toFloat(),
+                    steps = range.last - range.first - 1)
+                setProgress { requested ->
+                    val index = requested.roundToInt().coerceIn(range) - range.first
+                    scope.launch { pager.scrollToPage(index) }
+                    true
                 }
             }
-        )
+        },
+        contentPadding = PaddingValues(vertical = rowHeight),
+        flingBehavior = PagerDefaults.flingBehavior(pager, pagerSnapDistance = PagerSnapDistance.atMost(12)),
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) { index ->
+        val selected = index == pager.currentPage
+        val number = index + range.first
+        Box(Modifier.fillMaxSize().clickable { scope.launch { pager.animateScrollToPage(index) } },
+            contentAlignment = Alignment.Center) {
+            Text(if (twoDigits) number.toString().padStart(2, '0') else number.toString(),
+                modifier = Modifier.graphicsLayer {
+                    val distance = abs(index - pager.currentPage - pager.currentPageOffsetFraction).coerceAtMost(1f)
+                    scaleX = 1f - 0.22f * distance
+                    scaleY = scaleX
+                },
+                style = MaterialTheme.typography.headlineLarge.copy(fontFeatureSettings = "'tnum'"),
+                fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal,
+                color = if (selected) colors.onPrimaryContainer else colors.onSurfaceVariant)
+        }
     }
 }
 

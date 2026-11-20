@@ -661,14 +661,14 @@ public final class SoftBlocker extends AccessibilityService {
         void updateAppearance(Configuration configuration) {
             boolean dark = (configuration.uiMode & Configuration.UI_MODE_NIGHT_MASK)
                     == Configuration.UI_MODE_NIGHT_YES;
-            setBackgroundColor(dark ? 0xff11141b : 0xfff3f4f8);
-            heading.setTextColor(dark ? 0xfff1f4fb : 0xff171b25);
-            deadline.setTextColor(dark ? 0xffa9c7ff : 0xff173f87);
-            detail.setTextColor(dark ? 0xffbbc4d5 : 0xff555e70);
+            setBackgroundColor(dark ? 0xff131816 : 0xfff6f5f1);
+            heading.setTextColor(dark ? 0xffecf2ec : 0xff202925);
+            deadline.setTextColor(dark ? 0xff8dd6b8 : 0xff194a3d);
+            detail.setTextColor(dark ? 0xffb5c2b8 : 0xff53615a);
             for (Button button : Arrays.asList(stopTest, previous, home)) {
                 boolean emphasized = button == primary;
-                int text = emphasized ? (dark ? 0xff102e62 : 0xffffffff) : (dark ? 0xffd5e4ff : 0xff173f87);
-                int fill = emphasized ? (dark ? 0xffa9c7ff : 0xff1659cd) : (dark ? 0xff243a5f : 0xffe9f1ff);
+                int text = emphasized ? (dark ? 0xff09382a : 0xffffffff) : (dark ? 0xffcdeedf : 0xff194a3d);
+                int fill = emphasized ? (dark ? 0xff8dd6b8 : 0xff176552) : (dark ? 0xff203b32 : 0xffe0efe7);
                 GradientDrawable shape = new GradientDrawable();
                 shape.setColor(fill);
                 shape.setCornerRadius(dp(16));

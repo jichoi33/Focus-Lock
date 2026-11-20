@@ -58,8 +58,11 @@ internal fun WorkspaceDialogs(activity: MainActivity, state: FocusSnapshot) {
             }) {
                 Column(Modifier.weight(1f, fill = false).verticalScroll(rememberScrollState()),
                     verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    key(presetRevision) {
+                        DurationFields(value) { value = it }
+                    }
                     FlowRow(
-                        modifier = Modifier.selectableGroup(),
+                        modifier = Modifier.align(Alignment.CenterHorizontally).selectableGroup(),
                         horizontalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
                         listOf(15, 30, 60).forEach { minutes ->
@@ -70,12 +73,16 @@ internal fun WorkspaceDialogs(activity: MainActivity, state: FocusSnapshot) {
                                     // Replace the wheels so a previous fling cannot override the preset.
                                     presetRevision++
                                 },
-                                label = { Text(durationLabel(minutes)) }
+                                label = { Text(durationLabel(minutes)) },
+                                shape = RoundedCornerShape(50),
+                                border = null,
+                                colors = FilterChipDefaults.filterChipColors(
+                                    containerColor = MaterialTheme.colorScheme.surfaceContainer,
+                                    selectedContainerColor = MaterialTheme.colorScheme.primaryContainer,
+                                    selectedLabelColor = MaterialTheme.colorScheme.onPrimaryContainer
+                                )
                             )
                         }
-                    }
-                    key(presetRevision) {
-                        DurationFields(value) { value = it }
                     }
                 }
             }
@@ -272,7 +279,14 @@ internal fun FocusDialog(
                 Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(13.dp)) {
                     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                         Text(title, Modifier.weight(1f), style = MaterialTheme.typography.headlineSmall)
-                        IconButton(onClick = onDismiss) { Symbol("Close", "Close") }
+                        IconButton(onClick = onDismiss) {
+                            Surface(shape = androidx.compose.foundation.shape.CircleShape,
+                                color = MaterialTheme.colorScheme.surfaceContainer) {
+                                Box(Modifier.size(32.dp), contentAlignment = Alignment.Center) {
+                                    Symbol("Close", "Close", Modifier.size(16.dp))
+                                }
+                            }
+                        }
                     }
                     content()
                     if (onConfirm != null) PrimaryButton(confirmLabel, onConfirm)
