@@ -661,7 +661,9 @@ public final class SoftBlocker extends AccessibilityService {
         void updateAppearance(Configuration configuration) {
             boolean dark = (configuration.uiMode & Configuration.UI_MODE_NIGHT_MASK)
                     == Configuration.UI_MODE_NIGHT_YES;
-            setBackgroundColor(dark ? 0xff131816 : 0xfff6f5f1);
+            int[] backdrop = dark ? new int[]{0xff203b32, 0xff161e1b, 0xff131816}
+                    : new int[]{0xffdeede6, 0xffeff3ed, 0xfff6f5f1};
+            setBackground(new GradientDrawable(GradientDrawable.Orientation.TL_BR, backdrop));
             heading.setTextColor(dark ? 0xffecf2ec : 0xff202925);
             deadline.setTextColor(dark ? 0xff8dd6b8 : 0xff194a3d);
             detail.setTextColor(dark ? 0xffb5c2b8 : 0xff53615a);

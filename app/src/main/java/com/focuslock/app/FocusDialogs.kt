@@ -172,7 +172,7 @@ internal fun WorkspaceDialogs(activity: MainActivity, state: FocusSnapshot) {
             val allow = activity.allowlist
             val entries = remember(activity) { AppCatalog.launchable(activity) }
             val selected = if (allow) activity.allowedApps else activity.blockedApps
-            AppPickerDialog(activity, if (allow) "Allowed apps" else "Blocked apps", entries, selected,
+            AppPickerDialog(activity, if (allow) "Allowed apps" else "Blocked apps", entries, selected, allowBulkSelection = allow,
                 close = { activity.sheet = "rules" }) {
                 if (allow) activity.allowedApps = it else activity.blockedApps = it
                 activity.sheet = "rules"
@@ -438,6 +438,7 @@ private fun AppPickerDialog(
     initialSelection: Set<String>,
     close: () -> Unit,
     action: String = "Apply",
+    allowBulkSelection: Boolean = false,
     applySelection: (Set<String>) -> Unit
 ) {
     var selection by remember(title) { mutableStateOf(initialSelection) }
@@ -485,6 +486,22 @@ private fun AppPickerDialog(
                 state = if (selectedOnly) selectedListState else allListState,
                 modifier = Modifier.heightIn(max = height.coerceAtMost(360.dp))
             ) {
+                if (allowBulkSelection && !selectedOnly) {
+                    item {
+                        val ids = remember(filtered) { filtered.mapTo(mutableSetOf()) { it.id } }
+                        val allSelected = selection.containsAll(ids)
+                        val label = when {
+                            query.isEmpty() && allSelected -> "Deselect all apps"
+                            query.isEmpty() -> "Select all apps"
+                            allSelected -> "Deselect search results"
+                            else -> "Select search results"
+                        }
+                        TextButton(onClick = {
+                            selection = if (allSelected) selection - ids else selection + ids
+                        }, modifier = Modifier.fillMaxWidth()) { Text(label) }
+                        InsetDivider()
+                    }
+                }
                 items(filtered, key = { it.id }) { entry ->
                     val icon = remember(entry.id) {
                         runCatching { activity.packageManager.getApplicationIcon(entry.id).toBitmap(72, 72).asImageBitmap() }.getOrNull()

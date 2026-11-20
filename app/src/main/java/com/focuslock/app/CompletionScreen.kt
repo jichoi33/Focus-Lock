@@ -56,7 +56,7 @@ internal fun CompletionScreen(modes: Int, results: List<CompletedFocus>, onDone:
         else -> "Hard Lock and Soft Lock complete"
     }
     Box(
-        Modifier.fillMaxSize().background(colors.background).safeDrawingPadding(),
+        Modifier.fillMaxSize().background(Brush.verticalGradient(listOf(colors.primaryContainer, colors.background, colors.surfaceContainerLow))).safeDrawingPadding(),
         contentAlignment = Alignment.Center
     ) {
         Column(Modifier.widthIn(max = 420.dp).fillMaxSize().padding(horizontal = 28.dp, vertical = 20.dp)) {
@@ -127,8 +127,10 @@ private fun CompletionMark() {
     Box(Modifier.size(204.dp).drawWithCache {
         val unit = size.minDimension
         val origin = Offset(size.width / 2f, size.height / 2f)
-        val glow = Brush.radialGradient(listOf(colors.primaryContainer, colors.background),
+        val glow = Brush.radialGradient(listOf(colors.primaryContainer, colors.primaryContainer.copy(alpha = 0f)),
             center = origin, radius = unit * 0.5f)
+        val enamel = Brush.linearGradient(listOf(colors.primary, colors.secondary),
+            start = origin - Offset(42.dp.toPx(), 42.dp.toPx()), end = origin + Offset(42.dp.toPx(), 42.dp.toPx()))
         val ringStroke = Stroke(1.dp.toPx())
         val sparkStroke = 2.dp.toPx()
         val checkStroke = Stroke(3.5.dp.toPx(), cap = StrokeCap.Round, join = StrokeJoin.Round)
@@ -164,7 +166,7 @@ private fun CompletionMark() {
             drawCircle(colors.primary.copy(alpha = 0.42f * ripple), radius = 2.5.dp.toPx() * ripple,
                 center = origin + (dot - origin) * lerp(0.56f, 1f, ripple))
 
-            drawCircle(colors.primary, radius = 42.dp.toPx() * lerp(0.84f, 1f, arrival))
+            drawCircle(enamel, radius = 42.dp.toPx() * lerp(0.84f, 1f, arrival))
             val trace = celebrationPhase(time, 0.16f, 0.67f)
             visibleCheck.reset()
             if (checkLength.getSegment(0f, checkLength.length * trace, visibleCheck, startWithMoveTo = true)) {

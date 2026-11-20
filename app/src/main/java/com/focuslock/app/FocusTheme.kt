@@ -1,5 +1,9 @@
 package com.focuslock.app
 
+import android.os.Build
+import android.view.HapticFeedbackConstants
+import androidx.compose.ui.platform.LocalView
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.pager.PagerDefaults
 import androidx.compose.foundation.pager.PagerSnapDistance
@@ -122,7 +126,7 @@ internal fun TimerCard(modifier: Modifier = Modifier, content: @Composable Colum
     val shape = RoundedCornerShape(28.dp)
     Column(
         modifier.fillMaxWidth()
-            .background(colors.primaryContainer, shape)
+            .background(Brush.linearGradient(listOf(colors.primaryContainer, colors.secondaryContainer, colors.surfaceContainerLow)), shape)
             .padding(20.dp),
         verticalArrangement = Arrangement.spacedBy(15.dp),
         content = content
@@ -172,9 +176,15 @@ private fun DurationWheel(label: String, value: Int, range: IntRange, rowHeight:
     val listener by rememberUpdatedState(onValueChange)
     val latestValue by rememberUpdatedState(value)
     val scope = rememberCoroutineScope()
-    LaunchedEffect(pager) {
+    val view = LocalView.current
+    LaunchedEffect(pager, view) {
         snapshotFlow { pager.currentPage + range.first }.collect { selected ->
-            if (selected != latestValue) listener(selected)
+            if (selected != latestValue) {
+                val tick = if (Build.VERSION.SDK_INT >= 34) HapticFeedbackConstants.SEGMENT_TICK
+                    else HapticFeedbackConstants.CLOCK_TICK
+                view.performHapticFeedback(tick)
+                listener(selected)
+            }
         }
     }
     VerticalPager(
