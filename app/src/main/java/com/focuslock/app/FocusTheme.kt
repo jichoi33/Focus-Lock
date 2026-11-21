@@ -22,6 +22,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.StrokeJoin
@@ -121,12 +122,24 @@ internal fun GroupCard(modifier: Modifier = Modifier, content: @Composable Colum
 }
 
 @Composable
-internal fun TimerCard(modifier: Modifier = Modifier, content: @Composable ColumnScope.() -> Unit) {
+internal fun focusRainbow(): Brush {
+    val dark = isSystemInDarkTheme()
+    return remember(dark) {
+        val stops = if (dark) listOf(Color(0xFF3B1D42), Color(0xFF452D25), Color(0xFF36361B), Color(0xFF153F39),
+            Color(0xFF192E50), Color(0xFF302447))
+        else listOf(Color(0xFFFFD5E5), Color(0xFFFFE0C9), Color(0xFFFFEEB8), Color(0xFFC7F1DC),
+            Color(0xFFCBE8FF), Color(0xFFE3D7FF))
+        Brush.linearGradient(stops)
+    }
+}
+
+@Composable
+internal fun TimerCard(modifier: Modifier = Modifier, rainbow: Boolean = false, content: @Composable ColumnScope.() -> Unit) {
     val colors = MaterialTheme.colorScheme
     val shape = RoundedCornerShape(28.dp)
     Column(
         modifier.fillMaxWidth()
-            .background(colors.primaryContainer, shape)
+            .then(if (rainbow) Modifier.background(focusRainbow(), shape) else Modifier.background(colors.primaryContainer, shape))
             .padding(20.dp),
         verticalArrangement = Arrangement.spacedBy(15.dp),
         content = content
