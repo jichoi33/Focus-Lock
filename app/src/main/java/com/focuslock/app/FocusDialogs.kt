@@ -263,8 +263,7 @@ internal fun WorkspaceDialogs(activity: MainActivity, state: FocusSnapshot) {
                                 delay(Rule.MINUTE - value % Rule.MINUTE)
                             }
                         }
-                        Text("Ends at ${ClockLabels.unlockTime(now + minutes * Rule.MINUTE, now, activity.use24Hour)}",
-                            style = MaterialTheme.typography.titleMedium)
+                        DeadlineText(ClockLabels.deadline(now + minutes * Rule.MINUTE, now, activity.use24Hour, "Blocking ends"))
                     }
                     Text(prompt.text, style = MaterialTheme.typography.bodyMedium)
                 }

@@ -92,8 +92,11 @@ final class LockNotifications {
                 .setOnlyAlertOnce(true)
                 .setShowWhen(end > 0);
         if (end > 0) {
-            builder.setContentText(onBreak ? "Break time remaining" : "Ends at " + ClockLabels.time(context, end))
+            String text = onBreak ? "Break time remaining" : ClockLabels.deadline(end,
+                    System.currentTimeMillis(), ClockLabels.is24Hour(context), soft ? "Blocking ends" : "Unlocks");
+            builder.setContentText(text.replace('\n', ' '))
                     .setWhen(end).setUsesChronometer(true).setChronometerCountDown(true);
+            if (text.indexOf('\n') >= 0) builder.setStyle(new Notification.BigTextStyle().bigText(text));
         }
         return builder;
     }

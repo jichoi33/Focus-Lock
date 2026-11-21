@@ -160,7 +160,8 @@ private fun HardWorkspace(activity: MainActivity, state: FocusSnapshot) {
         val release = remember(state.hard, now) { activity.releaseAfter(state.hard, state.hard.activeEnd(), now) }
         val countdownEnd = if (onlyTest || release.end == 0L) state.hardEndElapsed
             else state.hardEndElapsed + (release.end - state.hard.activeEnd())
-        val unlock = activity.unlockLabel(release, now)
+        val unlock = if (release.end == 0L) "No scheduled unlock in the preview window"
+            else ClockLabels.deadline(release.end, now, activity.use24Hour, "Unlocks")
         val detail = if (paused) breakDetail(countdownEnd, state.breaks.until) else unlock
         RunningCard(title, if (paused) minOf(countdownEnd, state.breaks.until) else countdownEnd, detail,
             showCountdown = paused || onlyTest || release.end != 0L) {
@@ -308,7 +309,8 @@ private fun SoftWorkspace(activity: MainActivity, state: FocusSnapshot) {
         val paused = !session.test && state.breaks.until > SystemClock.elapsedRealtime()
         RunningCard(if (paused) "Break time remaining" else title,
             if (paused) minOf(state.breaks.until, session.timer.elapsedEnd) else session.timer.elapsedEnd,
-            if (paused) breakDetail(session.timer.elapsedEnd, state.breaks.until) else detail) {
+            if (paused) breakDetail(session.timer.elapsedEnd, state.breaks.until) else detail,
+            blockingEnds = !paused) {
             when {
                 session.test -> PrimaryButton("End test", SoftBlocker::endTest)
                 !state.blockingConnected -> PrimaryButton("Reconnect", { activity.openSettings(android.provider.Settings.ACTION_ACCESSIBILITY_SETTINGS) })
@@ -453,6 +455,7 @@ internal fun InsetDivider() = HorizontalDivider(Modifier.padding(horizontal = 16
 
 @Composable
 private fun RunningCard(title: String, end: Long, detail: String, showCountdown: Boolean = true,
+                        blockingEnds: Boolean = false,
                         actions: @Composable () -> Unit) {
     TimerCard {
         CardHeading("Clock", title)
@@ -469,9 +472,29 @@ private fun RunningCard(title: String, end: Long, detail: String, showCountdown:
                 style = TextStyle(fontSize = 44.sp, lineHeight = 54.sp, fontWeight = FontWeight.Medium,
                     letterSpacing = (-1).sp, fontFeatureSettings = "'tnum'"))
         }
-        Text(detail, style = MaterialTheme.typography.titleMedium)
+        if (blockingEnds) {
+            val use24Hour = ClockLabels.is24Hour(androidx.compose.ui.platform.LocalContext.current)
+            val deadline by produceState("", end, use24Hour) {
+                while (true) {
+                    val wallNow = System.currentTimeMillis()
+                    val remaining = (end - SystemClock.elapsedRealtime()).coerceAtLeast(0)
+                    value = ClockLabels.deadline(wallNow + remaining, wallNow, use24Hour, "Blocking ends")
+                    delay(Rule.MINUTE - wallNow % Rule.MINUTE)
+                }
+            }
+            DeadlineText(deadline)
+            Caption(detail)
+        } else {
+            DeadlineText(detail)
+        }
         Row(verticalAlignment = Alignment.CenterVertically) { actions() }
     }
+}
+
+@Composable
+internal fun DeadlineText(label: String) {
+    Text(label.substringBefore('\n'), style = MaterialTheme.typography.titleMedium)
+    if ('\n' in label) Caption(label.substringAfter('\n'))
 }
 
 @Preview(showBackground = true, widthDp = 412, heightDp = 780)

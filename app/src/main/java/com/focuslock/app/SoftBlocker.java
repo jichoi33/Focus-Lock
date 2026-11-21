@@ -90,6 +90,11 @@ public final class SoftBlocker extends AccessibilityService {
     private final CoverRelease release = new CoverRelease();
     private final AppReturn appReturn = new AppReturn();
     private long breakUntil;
+    private long noticeMidnight;
+    static void refreshDeadlineNotice() {
+        if (connected != null) connected.updateNotice();
+    }
+
     static void refreshBreak() {
         if (connected != null) connected.reload();
         reportChange();
@@ -175,7 +180,7 @@ public final class SoftBlocker extends AccessibilityService {
         customTabWindow = -1;
         navigation.reset();
         breakUntil = EmergencyBreaks.current(this).until;
-        LockNotifications.showSoft(this, session, breakUntil);
+        updateNotice();
         handler.removeCallbacks(update);
         queued = false;
         release.reset();
@@ -210,6 +215,11 @@ public final class SoftBlocker extends AccessibilityService {
         handler.postDelayed(update, 30);
     }
 
+    private void updateNotice() {
+        noticeMidnight = ClockLabels.nextMidnight(System.currentTimeMillis());
+        LockNotifications.showSoft(this, session, breakUntil);
+    }
+
     private void checkWindow() {
         queued = false;
         long now = SystemClock.elapsedRealtime();
@@ -226,9 +236,10 @@ public final class SoftBlocker extends AccessibilityService {
         boolean hardActive = now < FocusService.settingsBlockedUntil;
         if (breakUntil > 0 && breakUntil <= now) {
             breakUntil = EmergencyBreaks.current(this).until;
-            LockNotifications.showSoft(this, session, breakUntil);
+            updateNotice();
             reportChange();
         }
+        if (softActive && System.currentTimeMillis() >= noticeMidnight) updateNotice();
         boolean paused = !session.test && breakUntil > now;
         boolean realSession = softActive && !session.test;
         history.sample(now, realSession && !paused ? session.timer.elapsedEnd : 0,
@@ -512,7 +523,7 @@ public final class SoftBlocker extends AccessibilityService {
         boolean testing = session.test && session.active(now);
         long wallNow = System.currentTimeMillis();
         long remaining = Math.max(0, end - SystemClock.elapsedRealtime());
-        String until = ClockLabels.unlockTime(wallNow + remaining, wallNow, ClockLabels.is24Hour(this));
+        String until = ClockLabels.deadline(wallNow + remaining, wallNow, ClockLabels.is24Hour(this), "Available");
         if (cover != null) {
             coveredWindowId = windowId;
             cover.updateMessage(title, reason, until, site, testing);
@@ -653,7 +664,7 @@ public final class SoftBlocker extends AccessibilityService {
 
         void updateMessage(String title, String reason, String until, boolean site, boolean testing) {
             updateText(heading, title);
-            updateText(deadline, "Until " + until);
+            updateText(deadline, until);
             updateText(detail, testing ? (reason.isEmpty() ? "Soft Lock test" : "Soft Lock test\n" + reason) : reason);
             detail.setVisibility(detail.length() == 0 ? GONE : VISIBLE);
             stopTest.setVisibility(testing ? VISIBLE : GONE);

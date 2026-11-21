@@ -166,7 +166,9 @@ public final class FocusService extends Service {
         boolean testing = !hasRegularLock(state);
         boolean hasQuick = state.active.stream().anyMatch(window -> window.rule.quick() && !window.rule.test);
         boolean paused = !testing && breaks.until > clock.elapsed;
-        long noticeEnd = paused ? clock.wall + Math.min(end - clock.wall, breaks.until - clock.elapsed) : end;
+        long release = testing ? end : state.releaseAfter(end, clock.wall, java.time.ZoneId.systemDefault()).end;
+        long breakEnd = clock.wall + breaks.until - clock.elapsed;
+        long noticeEnd = paused ? (release > 0 ? Math.min(release, breakEnd) : breakEnd) : release;
         updateNotice(noticeEnd, hasQuick, breaks, paused, testing);
         if (wasWaiting && completion.pending() != 0) LockNotifications.showCompletion(this, completion.pending());
         if (!paused && !enforce()) {
@@ -255,7 +257,9 @@ public final class FocusService extends Service {
 
     private void updateNotice(long end, boolean hasQuick, EmergencyBreaks breaks, boolean paused, boolean testing) {
         boolean canStop = !testing && breaks.enabled && breaks.remaining() > 0 && !paused;
-        String key = end / 1000 + "/" + hasQuick + "/" + canStop + "/" + paused + "/" + testing + "/" + ClockLabels.is24Hour(this);
+        String label = end > 0 && !paused ? ClockLabels.deadline(end, System.currentTimeMillis(),
+                ClockLabels.is24Hour(this), "Unlocks") : "";
+        String key = end / 1000 + "/" + hasQuick + "/" + canStop + "/" + paused + "/" + testing + "/" + label;
         if (key.equals(noticeKey)) return;
         noticeKey = key;
         notifications.cancel(AlarmReceiver.SCHEDULE_NOTICE_ID);
@@ -277,6 +281,7 @@ public final class FocusService extends Service {
 
     private Notification notification(String title, long end, boolean extend, boolean canStop, boolean testing, boolean paused) {
         Notification.Builder builder = LockNotifications.timer(this, CHANNEL, title, end, false, paused);
+        if (end == 0 && "Hard Lock".equals(title)) builder.setContentText("No scheduled unlock in the preview window");
         if (Build.VERSION.SDK_INT >= 31) {
             builder.setForegroundServiceBehavior(Notification.FOREGROUND_SERVICE_IMMEDIATE);
         }

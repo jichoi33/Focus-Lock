@@ -77,6 +77,10 @@ public final class AlarmReceiver extends BroadcastReceiver {
             store.rebaseQuick();
             new SoftStore(context).rebase();
         }
+        if (Intent.ACTION_TIME_CHANGED.equals(intent.getAction())
+                || Intent.ACTION_TIMEZONE_CHANGED.equals(intent.getAction())) {
+            SoftBlocker.refreshDeadlineNotice();
+        }
         SessionClock clock = new SessionClock(context);
         Rule.State state = store.state(clock);
         if (ScheduleReminders.ACTION.equals(intent.getAction())) {
