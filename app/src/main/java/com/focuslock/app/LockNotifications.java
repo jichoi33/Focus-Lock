@@ -123,6 +123,19 @@ final class LockNotifications {
         manager.notify(SOFT_ID, notification.build());
     }
 
+    static void showSoftRecovery(Context context, long remaining) {
+        if (remaining <= 0 || !available(context, true)) return;
+        context.getSystemService(NotificationManager.class).notify(SOFT_ID,
+                new Notification.Builder(context, SOFT_CHANNEL)
+                        .setSmallIcon(R.drawable.ic_notification)
+                        .setContentTitle("Soft Lock timer is running")
+                        .setContentText("Waiting for the blocking service. Tap to check.")
+                        .setContentIntent(openApp(context, true))
+                        .setOnlyAlertOnce(true)
+                        .setTimeoutAfter(remaining)
+                        .build());
+    }
+
     static void showCompletion(Context context, int modes) {
         NotificationManager manager = context.getSystemService(NotificationManager.class);
         if (!manager.areNotificationsEnabled()) return;

@@ -38,6 +38,15 @@ final class AppCatalog {
         TelecomManager telecom = context.getSystemService(TelecomManager.class);
         if (telecom != null) excluded.add(telecom.getDefaultDialerPackage());
         excluded.addAll(homeApps(pm));
+        Intent install = new Intent(Intent.ACTION_VIEW)
+                .setDataAndType(Uri.parse("content://com.focuslock.app/update.apk"),
+                        "application/vnd.android.package-archive");
+        for (ResolveInfo handler : pm.queryIntentActivities(install,
+                PackageManager.MATCH_DEFAULT_ONLY | PackageManager.MATCH_SYSTEM_ONLY)) {
+            String installer = handler.activityInfo.packageName;
+            if (pm.checkPermission(android.Manifest.permission.INSTALL_PACKAGES, installer)
+                    == PackageManager.PERMISSION_GRANTED) excluded.add(installer);
+        }
         return excluded;
     }
 

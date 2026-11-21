@@ -33,6 +33,12 @@ Tap **Edit** next to the timer, then scroll **Hours** and **Minutes** to set a d
 
 To update, open the latest signed APK over your existing release. Android uses the app ID and signing certificate to decide whether it can install the update in place. Enable lock screen notifications if you want to see the Hard Lock countdown and emergency controls.
 
+### Updating during a lock
+
+Install the newer signed APK over the existing app to keep an active session and its original deadline. Android replaces the running process during installation. Hard Lock requests enforcement again after replacement, and Soft Lock resumes its saved rules when Android reconnects its accessibility service. If Android delays recovery, open Focus Lock from its notification. A Hard Lock can prevent interacting with the installer until an emergency break or the end of the session.
+
+On a managed device or work profile, Focus Lock can block its own uninstall during a session through Android’s device-owner, profile-owner or delegated **block-uninstall** policy. This policy permits in-place updates. Focus Lock clears the restriction it applied when the sessions end and Android processes the end event. A personal installation with ordinary device-admin or accessibility access cannot guarantee uninstall prevention. A device administrator can also enforce uninstall protection independently through its management console.
+
 ## How repeating Hard Locks work
 
 1. Choose **Every day**, **Weekdays**, **Weekends**, or **Custom**. For a custom schedule, select the days on which the lock **starts**.

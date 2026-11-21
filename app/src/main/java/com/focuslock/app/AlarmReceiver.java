@@ -28,6 +28,10 @@ public final class AlarmReceiver extends BroadcastReceiver {
                 || context.getSystemService(AlarmManager.class).canScheduleExactAlarms();
     }
 
+    static void schedulePolicyExpiry(Context context, long elapsedEnd) {
+        scheduleOne(context, 73, AlarmManager.ELAPSED_REALTIME_WAKEUP, elapsedEnd);
+    }
+
     static void cancel(Context context) {
         AlarmManager manager = context.getSystemService(AlarmManager.class);
         manager.cancel(alarm(context, WALL_CODE));
@@ -36,6 +40,7 @@ public final class AlarmReceiver extends BroadcastReceiver {
     }
 
     static void schedule(Context context, Rule.State state) {
+        SessionUninstallPolicy.reconcile(context, state, new SoftStore(context).read(), new SessionClock(context));
         if (!FocusAdmin.enabled(context)) {
             cancel(context);
             return;
@@ -79,7 +84,17 @@ public final class AlarmReceiver extends BroadcastReceiver {
             else ScheduleReminders.cancel(context);
             return;
         }
-        new SessionCompletion(context).reconcileHard(clock, state);
+        SessionCompletion completion = new SessionCompletion(context);
+        completion.reconcileHard(clock, state);
+        if (Intent.ACTION_MY_PACKAGE_REPLACED.equals(intent.getAction())) {
+            SoftStore soft = new SoftStore(context);
+            soft.checkCompletion(clock, completion);
+            SoftStore.Session session = soft.read();
+            if (session.active(clock.elapsed)) {
+                if (SoftBlocker.isConnected()) LockNotifications.showSoft(context, session);
+                else LockNotifications.showSoftRecovery(context, session.timer.elapsedEnd - clock.elapsed);
+            }
+        }
         schedule(context, state);
         boolean admin = FocusAdmin.enabled(context);
         if (state.active.isEmpty() || !admin) {
@@ -99,14 +114,14 @@ public final class AlarmReceiver extends BroadcastReceiver {
     static void showStartFailure(Context context, Rule.State state) {
         long end = 0L;
         for (Rule.Window window : state.active) {
-            if (!window.rule.quick()) end = Math.max(end, window.end);
+            end = Math.max(end, window.end);
         }
         long remaining = end - System.currentTimeMillis();
         if (remaining <= 0 || !LockNotifications.available(context, false)) return;
         context.getSystemService(NotificationManager.class).notify(SCHEDULE_NOTICE_ID,
                 new Notification.Builder(context, FocusService.CHANNEL)
                         .setSmallIcon(R.drawable.ic_notification)
-                        .setContentTitle("Scheduled lock couldn’t start")
+                        .setContentTitle("Hard Lock needs attention")
                         .setContentText("Tap to activate.")
                         .setContentIntent(LockNotifications.openApp(context, false))
                         .setTimeoutAfter(remaining)

@@ -101,6 +101,12 @@ final class SoftStore {
                     .putBoolean("block_unverifiable", blockUnverifiable);
         }
         edit.apply();
+        reconcilePolicy();
+    }
+
+    private void reconcilePolicy() {
+        SessionClock clock = new SessionClock(context);
+        SessionUninstallPolicy.reconcile(context, new FocusStore(context).state(clock), read(), clock);
     }
 
     boolean extend(int minutes) {
@@ -109,6 +115,7 @@ final class SoftStore {
         long remaining = current.elapsedEnd - clock.elapsed;
         if (remaining <= 0 || minutes < 1 || minutes > Rule.MAX_LOCK_MINUTES) return false;
         putDeadline(prefs.edit(), clock.start(remaining + minutes * Rule.MINUTE)).apply();
+        reconcilePolicy();
         return true;
     }
 

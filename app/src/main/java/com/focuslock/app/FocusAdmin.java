@@ -19,5 +19,7 @@ public final class FocusAdmin extends DeviceAdminReceiver {
         new SessionCompletion(context).cancelHard();
         context.stopService(new Intent(context, FocusService.class));
         AlarmReceiver.cancel(context);
+        SessionClock clock = new SessionClock(context);
+        SessionUninstallPolicy.reconcile(context, new Rule.State(), new SoftStore(context).read(), clock);
     }
 }

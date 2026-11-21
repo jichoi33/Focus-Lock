@@ -75,6 +75,7 @@ public final class SoftBlocker extends AccessibilityService {
     private SessionCompletion completion;
     private String sessionKey;
     private SoftStore.Session session;
+    private boolean awaitingSoftExpiry;
     private SoftStore.Session test;
     private Set<String> detectedBrowsers;
     private Set<String> essentials;
@@ -165,6 +166,7 @@ public final class SoftBlocker extends AccessibilityService {
         store.checkCompletion(new SessionClock(this), completion);
         if (test != null && !test.active(SystemClock.elapsedRealtime())) test = null;
         session = test == null ? store.read() : test;
+        awaitingSoftExpiry = !session.test && session.active(SystemClock.elapsedRealtime());
         sessionKey = store.sessionId();
         essentials = AppCatalog.essentials(this);
         settingsApps = AppCatalog.settingsApps(getPackageManager());
@@ -214,7 +216,12 @@ public final class SoftBlocker extends AccessibilityService {
         if (session == null) return;
         boolean softActive = session.active(now);
         if (!softActive && !session.test && session.timer.elapsedEnd > 0) {
-            store.checkCompletion(new SessionClock(this), completion);
+            SessionClock clock = new SessionClock(this);
+            store.checkCompletion(clock, completion);
+            if (awaitingSoftExpiry) {
+                awaitingSoftExpiry = false;
+                SessionUninstallPolicy.reconcile(this, new FocusStore(this).state(clock), session, clock);
+            }
         }
         boolean hardActive = now < FocusService.settingsBlockedUntil;
         if (breakUntil > 0 && breakUntil <= now) {
