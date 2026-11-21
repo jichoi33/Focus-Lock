@@ -9,7 +9,7 @@ import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.tween
-import androidx.compose.foundation.background
+import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
@@ -26,6 +26,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.drawWithCache
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.PathMeasure
@@ -39,6 +40,9 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.util.lerp
+import kotlin.math.PI
+import kotlin.math.sin
+import kotlin.math.cos
 
 internal data class CompletedFocus(val mode: Int, val name: String, val millis: Long) {
     val timeLabel: String?
@@ -55,8 +59,48 @@ internal fun CompletionScreen(modes: Int, results: List<CompletedFocus>, onDone:
         SessionCompletion.SOFT -> "Soft Lock complete"
         else -> "Hard Lock and Soft Lock complete"
     }
+    val dark = isSystemInDarkTheme()
+    val backdrop = remember(dark) {
+        if (dark) listOf(Color(0xFF3B1D42), Color(0xFF452D25), Color(0xFF36361B), Color(0xFF153F39),
+            Color(0xFF192E50), Color(0xFF302447))
+        else listOf(Color(0xFFFFD5E5), Color(0xFFFFE0C9), Color(0xFFFFEEB8), Color(0xFFC7F1DC),
+            Color(0xFFCBE8FF), Color(0xFFE3D7FF))
+    }
+    val confetti = remember(dark) {
+        if (dark) listOf(Color(0xFFFFA8C8), Color(0xFFFFCA84), Color(0xFF83E3BA), Color(0xFF92C9FF), Color(0xFFC6AAFF))
+        else listOf(Color(0xFFCC4276), Color(0xFFC57812), Color(0xFF21856E), Color(0xFF3374CB), Color(0xFF8654C1))
+    }
+    val motion = !LocalInspectionMode.current && ValueAnimator.areAnimatorsEnabled()
+    val drift = if (motion) rememberInfiniteTransition(label = "Confetti").animateFloat(
+        initialValue = 0f, targetValue = 1f,
+        animationSpec = infiniteRepeatable(tween(9500, easing = LinearEasing)),
+        label = "Rising ribbons"
+    ) else null
     Box(
-        Modifier.fillMaxSize().background(colors.background).safeDrawingPadding(),
+        Modifier.fillMaxSize().drawWithCache {
+            val wash = Brush.linearGradient(backdrop, Offset.Zero, Offset(size.width, size.height))
+            val stroke = 2.5.dp.toPx()
+            onDrawBehind {
+                drawRect(wash)
+                val t = drift?.value ?: 0.36f
+                repeat(24) { i ->
+                    // Stagger the loops and keep the middle clear for session details.
+                    val rise = (t + i * 0.618034f) % 1f
+                    val angle = (2 * PI * (rise + i * 0.31)).toFloat()
+                    val inset = 0.035f + (i % 6) * 0.022f + sin(angle) * 0.023f
+                    val x = if (i % 2 == 0) inset else 1f - inset
+                    val center = Offset(size.width * x, size.height * (1f - rise))
+                    val tint = confetti[i % confetti.size]
+                    val opacity = (sin(PI * rise).toFloat() * 0.8f).coerceIn(0f, 1f)
+                    if (i % 3 == 0) {
+                        drawCircle(tint, stroke, center, alpha = opacity)
+                    } else {
+                        val arm = Offset(cos(angle), sin(angle)) * stroke * 1.8f
+                        drawLine(tint, center - arm, center + arm, stroke, StrokeCap.Round, alpha = opacity)
+                    }
+                }
+            }
+        }.safeDrawingPadding(),
         contentAlignment = Alignment.Center
     ) {
         Column(Modifier.widthIn(max = 420.dp).fillMaxSize().padding(horizontal = 28.dp, vertical = 20.dp)) {
@@ -127,7 +171,7 @@ private fun CompletionMark() {
     Box(Modifier.size(204.dp).drawWithCache {
         val unit = size.minDimension
         val origin = Offset(size.width / 2f, size.height / 2f)
-        val glow = Brush.radialGradient(listOf(colors.primaryContainer, colors.background),
+        val glow = Brush.radialGradient(listOf(colors.primaryContainer, colors.primaryContainer.copy(alpha = 0f)),
             center = origin, radius = unit * 0.5f)
         val ringStroke = Stroke(1.dp.toPx())
         val sparkStroke = 2.dp.toPx()
