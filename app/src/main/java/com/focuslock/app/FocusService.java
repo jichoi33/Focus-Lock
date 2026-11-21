@@ -155,7 +155,7 @@ public final class FocusService extends Service {
             setEnforcedUntil(0L);
             history.stop();
             if (state.active.isEmpty() && handleCompletion(clock, justUnlocked)) return;
-            if (foregroundId == 0) publish(NOTIFICATION_ID, notification("Starting Hard Lock", 0, false, false, false));
+            if (foregroundId == 0) publish(NOTIFICATION_ID, notification("Starting Hard Lock", 0, false, false, false, false));
             stopSelf();
             return;
         }
@@ -259,7 +259,7 @@ public final class FocusService extends Service {
         if (key.equals(noticeKey)) return;
         noticeKey = key;
         notifications.cancel(AlarmReceiver.SCHEDULE_NOTICE_ID);
-        publish(NOTIFICATION_ID, notification(testing ? "Hard Lock test" : paused ? "Emergency break" : "Hard Lock", end, hasQuick, canStop, testing));
+        publish(NOTIFICATION_ID, notification(testing ? "Hard Lock test" : paused ? "Emergency break" : "Hard Lock", end, hasQuick, canStop, testing, paused));
     }
 
     private void publish(int id, Notification notification) {
@@ -275,8 +275,8 @@ public final class FocusService extends Service {
         foregroundId = id;
     }
 
-    private Notification notification(String title, long end, boolean extend, boolean canStop, boolean testing) {
-        Notification.Builder builder = LockNotifications.timer(this, CHANNEL, title, end, false);
+    private Notification notification(String title, long end, boolean extend, boolean canStop, boolean testing, boolean paused) {
+        Notification.Builder builder = LockNotifications.timer(this, CHANNEL, title, end, false, paused);
         if (Build.VERSION.SDK_INT >= 31) {
             builder.setForegroundServiceBehavior(Notification.FOREGROUND_SERVICE_IMMEDIATE);
         }

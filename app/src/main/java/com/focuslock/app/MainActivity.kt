@@ -52,7 +52,7 @@ internal data class DurationInput(val hours: String = "0", val minutes: String =
 
 internal data class Prompt(
     val title: String, val text: String, val action: String,
-    val cancel: () -> Unit = {}, val confirm: () -> Unit
+    val cancel: () -> Unit = {}, val durationMinutes: Int? = null, val confirm: () -> Unit
 )
 
 internal data class SchedulePreview(val window: Rule.Window, val release: Long) {
@@ -218,6 +218,8 @@ class MainActivity : ComponentActivity() {
         val returnHomeDefault = softStore.returnHomeByDefault()
         returnHomeOnBlock = savedInstanceState?.getBoolean("return_home", returnHomeDefault) ?: returnHomeDefault
         allowlist = savedInstanceState?.getBoolean("allowlist") ?: session.allowlist
+        sheet = savedInstanceState?.getString("rule_editor")
+        tighteningSessionId = savedInstanceState?.getString("editing_session")
         schedule = savedInstanceState?.getBundle("schedule_editor")?.readSchedule()
         scheduleForReview = savedInstanceState?.getBundle("schedule_review")?.readSchedule()
         setupAction = savedInstanceState?.getString("setup_action")?.let(SetupAction::valueOf)
@@ -312,6 +314,10 @@ class MainActivity : ComponentActivity() {
         outState.putStringArrayList("soft_sites", ArrayList(blockedSites))
         outState.putBundle("schedule_editor", schedule?.saveSchedule())
         outState.putBundle("schedule_review", scheduleForReview?.saveSchedule())
+        if (sheet in setOf("apps", "sites", "tighten-apps", "tighten-sites")) {
+            outState.putString("rule_editor", sheet)
+            outState.putString("editing_session", tighteningSessionId)
+        }
         outState.putString("setup_action", setupAction?.name)
         outState.putString("setup_permission", setupPermission?.name)
         super.onSaveInstanceState(outState)
@@ -652,7 +658,7 @@ class MainActivity : ComponentActivity() {
             "\nFor urgent use, open Focus Lock and tap Emergency break." else "\nEmergency breaks are off."
         prompt = Prompt(if (test) "Ready for your 1-minute test" else "Start Soft Lock?",
             "$session\n$summary\nAndroid Settings will be blocked.$breakInfo$notice",
-            if (test) "Start test" else "Start") {
+            if (test) "Start test" else "Start", durationMinutes = minutes) {
             if (requireSoftConnection(test) && SoftBlocker.activeTest() == null &&
                 !softStore.read().active(SystemClock.elapsedRealtime())) {
                 if (test) {

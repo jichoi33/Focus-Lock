@@ -153,7 +153,7 @@ private fun HardWorkspace(activity: MainActivity, state: FocusSnapshot) {
         val paused = !onlyTest && state.breaks.until > SystemClock.elapsedRealtime()
         val title = when {
             onlyTest -> "Hard Lock test"
-            paused -> "Emergency break"
+            paused -> "Break time remaining"
             state.hardEnforced -> "Hard Lock active"
             else -> "Hard Lock pending"
         }
@@ -161,7 +161,7 @@ private fun HardWorkspace(activity: MainActivity, state: FocusSnapshot) {
         val countdownEnd = if (onlyTest || release.end == 0L) state.hardEndElapsed
             else state.hardEndElapsed + (release.end - state.hard.activeEnd())
         val unlock = activity.unlockLabel(release, now)
-        val detail = if (paused) "${breakDetail(countdownEnd, state.breaks.until)}\n$unlock" else unlock
+        val detail = if (paused) breakDetail(countdownEnd, state.breaks.until) else unlock
         RunningCard(title, if (paused) minOf(countdownEnd, state.breaks.until) else countdownEnd, detail,
             showCountdown = paused || onlyTest || release.end != 0L) {
             if (onlyTest) TextButton(onClick = { activity.hardAction(FocusService.END_TEST) }) { Text("End test") }
@@ -305,7 +305,7 @@ private fun SoftWorkspace(activity: MainActivity, state: FocusSnapshot) {
         }
         val detail = if (state.blockingConnected) summary else "The timer continues while blocking is paused."
         val paused = !session.test && state.breaks.until > SystemClock.elapsedRealtime()
-        RunningCard(if (paused) "Emergency break" else title,
+        RunningCard(if (paused) "Break time remaining" else title,
             if (paused) minOf(state.breaks.until, session.timer.elapsedEnd) else session.timer.elapsedEnd,
             if (paused) breakDetail(session.timer.elapsedEnd, state.breaks.until) else detail) {
             when {

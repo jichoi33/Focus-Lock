@@ -21,7 +21,13 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.saveable.Saver
 import androidx.compose.runtime.saveable.listSaver
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.text.TextRange
+import androidx.compose.ui.text.input.TextFieldValue
+import kotlinx.coroutines.delay
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.asImageBitmap
@@ -248,7 +254,21 @@ internal fun WorkspaceDialogs(activity: MainActivity, state: FocusSnapshot) {
         AlertDialog(
             onDismissRequest = cancel,
             title = { Text(prompt.title, style = MaterialTheme.typography.headlineSmall) },
-            text = { Text(prompt.text, style = MaterialTheme.typography.bodyMedium) },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    prompt.durationMinutes?.let { minutes ->
+                        val now by produceState(System.currentTimeMillis(), prompt) {
+                            while (true) {
+                                value = System.currentTimeMillis()
+                                delay(Rule.MINUTE - value % Rule.MINUTE)
+                            }
+                        }
+                        Text("Ends at ${ClockLabels.unlockTime(now + minutes * Rule.MINUTE, now, activity.use24Hour)}",
+                            style = MaterialTheme.typography.titleMedium)
+                    }
+                    Text(prompt.text, style = MaterialTheme.typography.bodyMedium)
+                }
+            },
             confirmButton = { TextButton(onClick = { dismiss(); prompt.confirm() }) { Text(prompt.action) } },
             dismissButton = { TextButton(onClick = cancel) { Text("Cancel") } },
             containerColor = MaterialTheme.colorScheme.surface,
@@ -427,10 +447,14 @@ private fun AppPickerDialog(
     allowBulkSelection: Boolean = false,
     applySelection: (Set<String>) -> Unit
 ) {
-    var selection by remember(title) { mutableStateOf(initialSelection) }
-    var selectedOnly by remember { mutableStateOf(false) }
-    var allQuery by remember { mutableStateOf("") }
-    var selectedQuery by remember { mutableStateOf("") }
+    var selection by rememberSaveable(title, stateSaver = Saver<Set<String>, ArrayList<String>>(
+        save = { ArrayList(it) }, restore = { it.toSet() }
+    )) { mutableStateOf(initialSelection) }
+    var confirmDiscard by rememberSaveable { mutableStateOf(false) }
+    val requestClose = { if (selection == initialSelection) close() else confirmDiscard = true }
+    var selectedOnly by rememberSaveable { mutableStateOf(false) }
+    var allQuery by rememberSaveable { mutableStateOf("") }
+    var selectedQuery by rememberSaveable { mutableStateOf("") }
     val allListState = rememberLazyListState()
     val selectedListState = rememberLazyListState()
     val query = (if (selectedOnly) selectedQuery else allQuery).trim()
@@ -448,7 +472,7 @@ private fun AppPickerDialog(
         }
     }
     val height = dialogBodyHeight()
-    FocusDialog(title, close, { applySelection(selection) }, "$action (${selection.size})") {
+    FocusDialog(title, requestClose, { applySelection(selection) }, "$action (${selection.size})") {
         OutlinedTextField(
             if (selectedOnly) selectedQuery else allQuery,
             { if (selectedOnly) selectedQuery = it else allQuery = it },
@@ -506,6 +530,12 @@ private fun AppPickerDialog(
             }
         }
     }
+    if (confirmDiscard) AlertDialog(
+        onDismissRequest = { confirmDiscard = false },
+        title = { Text("Discard app selection changes?") },
+        confirmButton = { TextButton(onClick = close) { Text("Discard changes") } },
+        dismissButton = { TextButton(onClick = { confirmDiscard = false }) { Text("Keep editing") } }
+    )
 }
 
 @Composable
@@ -516,19 +546,41 @@ private fun SitesDialog(
     action: String = "Apply",
     applySites: (Set<String>) -> Unit
 ) {
-    var input by remember { mutableStateOf(initialSites.joinToString("\n")) }
-    var error by remember { mutableStateOf(false) }
+    var input by rememberSaveable(stateSaver = TextFieldValue.Saver) {
+        mutableStateOf(TextFieldValue(initialSites.joinToString("\n")))
+    }
+    var errorLine by rememberSaveable { mutableIntStateOf(0) }
+    val focus = remember { FocusRequester() }
     FocusDialog(title, close, {
-        val hosts = input.lineSequence().map(String::trim).filter(String::isNotEmpty).map(BlockRules::domain).toList()
-        if (hosts.any(String::isEmpty)) error = true
-        else applySites(hosts.toSet())
+        val hosts = mutableSetOf<String>()
+        var offset = 0
+        errorLine = 0
+        for ((index, line) in input.text.lineSequence().withIndex()) {
+            val start = offset
+            if (line.isNotBlank()) {
+                val host = BlockRules.domain(line.trim())
+                if (host.isEmpty()) {
+                    errorLine = index + 1
+                    focus.requestFocus()
+                    input = input.copy(selection = TextRange(start, start + line.length))
+                    break
+                }
+                hosts.add(host)
+            }
+            offset = start + line.length
+            if (input.text.getOrNull(offset) == '\r') offset++
+            if (input.text.getOrNull(offset) == '\n') offset++
+        }
+        if (errorLine == 0) applySites(hosts)
     }, action) {
         Caption("Enter one domain per line. Subdomains are included.")
-        OutlinedTextField(input, { input = it; error = false },
-            placeholder = { Text("youtube.com\nreddit.com") }, minLines = 3, maxLines = 6,
-            isError = error,
-            supportingText = if (error) ({ Text("Check the domain or web address.") }) else null,
-            modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(14.dp))
+        OutlinedTextField(input, {
+            if (it.text != input.text) errorLine = 0
+            input = it
+        }, placeholder = { Text("youtube.com\nreddit.com") }, minLines = 3, maxLines = 6,
+            isError = errorLine != 0,
+            supportingText = if (errorLine != 0) ({ Text("Check the address on line $errorLine.") }) else null,
+            modifier = Modifier.fillMaxWidth().focusRequester(focus), shape = RoundedCornerShape(14.dp))
         Caption("Focus Lock reads visible addresses in supported browsers. A page may begin loading before the block appears.")
     }
 }

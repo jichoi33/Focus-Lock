@@ -81,7 +81,7 @@ final class LockNotifications {
                         .build());
     }
 
-    static Notification.Builder timer(Context context, String channel, String title, long end, boolean soft) {
+    static Notification.Builder timer(Context context, String channel, String title, long end, boolean soft, boolean onBreak) {
         Notification.Builder builder = new Notification.Builder(context, channel)
                 .setSmallIcon(R.drawable.ic_notification)
                 .setContentTitle(title)
@@ -92,8 +92,7 @@ final class LockNotifications {
                 .setOnlyAlertOnce(true)
                 .setShowWhen(end > 0);
         if (end > 0) {
-            String time = ClockLabels.time(context, end);
-            builder.setContentText("Ends at " + time)
+            builder.setContentText(onBreak ? "Break time remaining" : "Ends at " + ClockLabels.time(context, end))
                     .setWhen(end).setUsesChronometer(true).setChronometerCountDown(true);
         }
         return builder;
@@ -115,7 +114,7 @@ final class LockNotifications {
         long countdown = paused ? Math.min(remaining, breakUntil - SystemClock.elapsedRealtime()) : remaining;
         Notification.Builder notification = timer(context, SOFT_CHANNEL,
                 session.test ? "Soft Lock test" : paused ? "Emergency break" : "Soft Lock",
-                System.currentTimeMillis() + countdown, true).setTimeoutAfter(remaining);
+                System.currentTimeMillis() + countdown, true, paused).setTimeoutAfter(remaining);
         if (!session.test && !paused && EmergencyBreaks.current(context).available(SystemClock.elapsedRealtime())) {
             PendingIntent emergency = PendingIntent.getActivity(context, 24, openSoftBreak(context),
                     PendingIntent.FLAG_IMMUTABLE | PendingIntent.FLAG_UPDATE_CURRENT);
