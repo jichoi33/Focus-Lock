@@ -1,11 +1,19 @@
-# Focus Lock
+<p align="center">
+  <img src="docs/focus-lock.png" width="96" height="96" alt="Focus Lock app icon">
+</p>
 
-Focus Lock helps you put your Android phone away for a set time or keep distractions out while you work. Start a session when you need it, or schedule a recurring time to disconnect.
+<h1 align="center">Focus Lock</h1>
 
-- [**Download the latest APK**](https://github.com/jichoi33/Focus-Lock/releases/latest)
-- [Report a bug](https://github.com/jichoi33/Focus-Lock/issues)
+<p align="center">Set your Android phone aside for a while, or choose which apps can interrupt you.</p>
 
-Requires **Android 8.0 or later**. The app is in English and follows your device's light or dark theme.
+<p align="center">
+  <a href="https://github.com/jichoi33/Focus-Lock/releases/latest"><strong>Download for Android</strong></a>
+  &nbsp; | &nbsp; <a href="#install-and-get-started">Quick start</a>
+  &nbsp; | &nbsp; <a href="#build-from-source">Build from source</a>
+  &nbsp; | &nbsp; <a href="https://github.com/jichoi33/Focus-Lock/issues">Report a bug</a>
+</p>
+
+**Android 8.0+**. English interface with light and dark themes. Settings and focus history stay on your device.
 
 ## Choose a lock
 
@@ -27,14 +35,29 @@ To update, open the latest signed APK over your existing release. Android uses t
 
 ## How repeating Hard Locks work
 
-Choose **Every day**, **Weekdays**, **Weekends**, or **Custom**. In Custom, tap the days the lock **starts**. For example, choosing Monday through Friday, **22:00 → 07:00**, includes Friday night through Saturday morning. Setting the start and end to the same time creates a full-day window. If Hard Locks overlap or run back to back, the phone stays locked until there is a gap. Tap **Save schedule** to review the first lock and its unlock time. Tap **Save schedule** again to confirm. Times follow your device’s 12-hour or 24-hour setting.
+1. Choose **Every day**, **Weekdays**, **Weekends**, or **Custom**. For a custom schedule, select the days on which the lock **starts**.
+2. Set the start and end times. Times follow your device’s 12-hour or 24-hour setting.
+3. Tap **Save schedule** to review the first lock and final unlock time, then tap **Save schedule** again to confirm.
+
+**Overnight example.** A Monday–Friday schedule from **22:00 to 07:00** includes Friday night through Saturday morning. Matching start and end times create a full-day window. Overlapping or back-to-back locks continue until the first gap.
 
 ## During a session
 
-- **Schedules** show the time range and start days for each repeating lock. Tap an inactive schedule to edit it, or use its switch to turn it on or off. When a repeating schedule could start immediately, you can start it now or wait for the next occurrence. Daily schedules that run continuously ask for confirmation. Focus Lock schedules a reminder five minutes before a scheduled lock. Android power-saving settings can delay it.
-- **Emergency breaks** let you pause either lock temporarily while its countdown continues. Configure the duration and number of breaks in Focus Lock settings before starting. For Hard Lock, expand the lock screen notification. For Soft Lock, tap **Emergency break** in the app or its expanded countdown notification, then confirm **Take break**. Blocking resumes automatically at the end of the break.
-- **Soft Lock rules** can be tightened mid-session, and you can add time if you need it. Website rules include subdomains and depend on the address bar being readable in a supported browser. If the accessibility service disconnects, the app shows **Blocking paused** while the countdown continues.
-- **Completion and statistics** show what you finished and how much time the app actually protected. Open Focus Lock after a regular session to see the celebration, or tap the completion notification. For Hard Lock, enable **Settings → Celebration on unlock** to open it when you unlock within 12 hours of the session ending. On Android 10 and later, allow Focus Lock to display over other apps when prompted. If Android prevents the automatic launch, the notification and app still offer the celebration. Each mode has a seven-day view and all-time totals. One-minute tests are excluded from statistics.
+### Scheduled locks
+
+Schedules show the time range and start days for each repeating lock. Tap an inactive schedule to edit it, or use its switch to turn it on or off. When a repeating schedule could start immediately, you can start it now or wait for the next occurrence. Daily schedules that run continuously ask for confirmation. Focus Lock schedules a reminder five minutes before a scheduled lock. Android power-saving settings can delay it.
+
+### Emergency breaks
+
+Emergency breaks let you pause either lock temporarily while its countdown continues. Configure the duration and number of breaks in Focus Lock settings before starting. For Hard Lock, expand the lock screen notification. For Soft Lock, tap **Emergency break** in the app or its expanded countdown notification, then confirm **Take break**. Blocking resumes automatically at the end of the break.
+
+### Soft Lock rules
+
+You can tighten rules or add time mid-session. Website rules include subdomains and depend on the address bar being readable in a supported browser. If the accessibility service disconnects, the app shows **Blocking paused** while the countdown continues.
+
+### Completion and statistics
+
+Statistics show how much time Focus Lock protected. Open Focus Lock after a regular session to see the celebration, or tap the completion notification. For Hard Lock, enable **Settings → Celebration on unlock** to open it when you unlock within 12 hours of the session ending. On Android 10 and later, allow Focus Lock to display over other apps when prompted. If Android prevents the automatic launch, the notification and app still offer the celebration. Choose **Last 7 days** to see the date range or **All time** for lifetime totals. One-minute tests are excluded from statistics.
 
 <details>
 <summary>How Android permissions affect a lock</summary>

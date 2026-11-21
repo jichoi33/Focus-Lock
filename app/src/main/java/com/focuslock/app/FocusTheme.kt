@@ -1,5 +1,12 @@
 package com.focuslock.app
 
+import android.animation.ValueAnimator
+import androidx.compose.animation.core.*
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawWithCache
+import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.drawscope.translate
+import androidx.compose.ui.platform.LocalInspectionMode
 import android.media.AudioAttributes
 import android.os.VibrationEffect
 import android.os.Vibrator
@@ -122,14 +129,29 @@ internal fun GroupCard(modifier: Modifier = Modifier, content: @Composable Colum
 }
 
 @Composable
-internal fun focusRainbow(): Brush {
+internal fun Modifier.focusRainbow(): Modifier {
     val dark = isSystemInDarkTheme()
-    return remember(dark) {
-        val stops = if (dark) listOf(Color(0xFF3B1D42), Color(0xFF452D25), Color(0xFF36361B), Color(0xFF153F39),
+    val stops = remember(dark) {
+        if (dark) listOf(Color(0xFF3B1D42), Color(0xFF452D25), Color(0xFF36361B), Color(0xFF153F39),
             Color(0xFF192E50), Color(0xFF302447))
         else listOf(Color(0xFFFFD5E5), Color(0xFFFFE0C9), Color(0xFFFFEEB8), Color(0xFFC7F1DC),
             Color(0xFFCBE8FF), Color(0xFFE3D7FF))
-        Brush.linearGradient(stops)
+    }
+    val motion = !LocalInspectionMode.current && ValueAnimator.areAnimatorsEnabled()
+    val drift = if (motion) rememberInfiniteTransition(label = "Rainbow background").animateFloat(
+        initialValue = -1f, targetValue = 1f,
+        animationSpec = infiniteRepeatable(tween(9500, easing = FastOutSlowInEasing), RepeatMode.Reverse),
+        label = "Color drift"
+    ) else null
+    return drawWithCache {
+        val dx = size.width * 0.22f
+        val dy = size.height * 0.16f
+        val brush = Brush.linearGradient(stops, Offset(dx, dy), Offset(dx + size.width, dy + size.height))
+        val extent = Size(size.width + 2 * dx, size.height + 2 * dy)
+        onDrawBehind {
+            val shift = drift?.value ?: 0f
+            translate(dx * (shift - 1f), dy * (shift - 1f)) { drawRect(brush, size = extent) }
+        }
     }
 }
 
@@ -139,7 +161,7 @@ internal fun TimerCard(modifier: Modifier = Modifier, rainbow: Boolean = false, 
     val shape = RoundedCornerShape(28.dp)
     Column(
         modifier.fillMaxWidth()
-            .then(if (rainbow) Modifier.background(focusRainbow(), shape) else Modifier.background(colors.primaryContainer, shape))
+            .then(if (rainbow) Modifier.clip(shape).focusRainbow() else Modifier.background(colors.primaryContainer, shape))
             .padding(20.dp),
         verticalArrangement = Arrangement.spacedBy(15.dp),
         content = content
@@ -251,8 +273,19 @@ internal fun Caption(text: String, modifier: Modifier = Modifier) =
     Text(text, modifier, color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall)
 
 @Composable
-internal fun PrimaryButton(label: String, onClick: () -> Unit, modifier: Modifier = Modifier) {
-    Button(onClick, modifier.fillMaxWidth().heightIn(min = 50.dp), shape = RoundedCornerShape(15.dp)) {
+internal fun rainbowAccent(): Color =
+    if (isSystemInDarkTheme()) Color(0xFFF0BFD9) else Color(0xFF693C5B)
+
+@Composable
+internal fun rainbowButtonColors() = ButtonDefaults.buttonColors(
+    containerColor = rainbowAccent(),
+    contentColor = if (isSystemInDarkTheme()) Color(0xFF371F31) else Color.White
+)
+
+@Composable
+internal fun PrimaryButton(label: String, onClick: () -> Unit, modifier: Modifier = Modifier,
+                          colors: ButtonColors = ButtonDefaults.buttonColors()) {
+    Button(onClick, modifier.fillMaxWidth().heightIn(min = 50.dp), shape = RoundedCornerShape(15.dp), colors = colors) {
         Text(label)
     }
 }

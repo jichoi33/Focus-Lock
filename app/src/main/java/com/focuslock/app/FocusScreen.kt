@@ -239,11 +239,11 @@ private fun SessionCard(duration: DurationInput, edit: () -> Unit, label: String
                         style = TextStyle(fontSize = 48.sp, lineHeight = 54.sp, letterSpacing = (-2).sp,
                             fontWeight = FontWeight.Medium, fontFeatureSettings = "'tnum'"))
                 }
-                Text("Edit", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary)
+                Text("Edit", style = MaterialTheme.typography.labelLarge, color = rainbowAccent())
             }
             rules?.invoke()
         }
-        PrimaryButton(label, start)
+        PrimaryButton(label, start, colors = rainbowButtonColors())
     }
 }
 

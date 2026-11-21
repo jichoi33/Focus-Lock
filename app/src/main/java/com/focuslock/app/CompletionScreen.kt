@@ -6,7 +6,7 @@ import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
-import androidx.compose.foundation.background
+import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
@@ -40,14 +40,14 @@ internal data class CompletedFocus(val mode: Int, val name: String, val millis: 
 
 @Composable
 internal fun CompletionScreen(modes: Int, results: List<CompletedFocus>, onDone: () -> Unit) {
-    val colors = MaterialTheme.colorScheme
+    val accent = rainbowAccent()
     val modeLabel = when (modes) {
         SessionCompletion.HARD -> "Hard Lock complete"
         SessionCompletion.SOFT -> "Soft Lock complete"
         else -> "Hard Lock and Soft Lock complete"
     }
     Box(
-        Modifier.fillMaxSize().background(focusRainbow()).safeDrawingPadding(),
+        Modifier.fillMaxSize().clipToBounds().focusRainbow().safeDrawingPadding(),
         contentAlignment = Alignment.Center
     ) {
         Column(Modifier.widthIn(max = 420.dp).fillMaxSize().padding(horizontal = 28.dp, vertical = 20.dp)) {
@@ -65,7 +65,7 @@ internal fun CompletionScreen(modes: Int, results: List<CompletedFocus>, onDone:
                     Text(singleResult?.timeLabel ?: "Nicely done.", Modifier.semantics { heading() },
                         style = MaterialTheme.typography.headlineLarge, textAlign = TextAlign.Center)
                     Spacer(Modifier.height(6.dp))
-                    Text(modeLabel, style = MaterialTheme.typography.labelLarge, color = colors.primary,
+                    Text(modeLabel, style = MaterialTheme.typography.labelLarge, color = accent,
                         textAlign = TextAlign.Center)
                     results.forEach { result ->
                         val name = result.name.takeUnless { it.isBlank() || (result.mode == SessionCompletion.HARD && it == "Hard Lock") }
@@ -77,7 +77,7 @@ internal fun CompletionScreen(modes: Int, results: List<CompletedFocus>, onDone:
                         } else if (result.timeLabel != null || name != null) {
                             val mode = if (result.mode == SessionCompletion.HARD) "Hard Lock" else "Soft Lock"
                             Spacer(Modifier.height(16.dp))
-                            Text(mode, style = MaterialTheme.typography.labelMedium, color = colors.primary)
+                            Text(mode, style = MaterialTheme.typography.labelMedium, color = accent)
                             result.timeLabel?.let {
                                 Text(it, style = MaterialTheme.typography.titleLarge, textAlign = TextAlign.Center)
                             }
@@ -89,7 +89,7 @@ internal fun CompletionScreen(modes: Int, results: List<CompletedFocus>, onDone:
                 }
             }
             Spacer(Modifier.height(12.dp))
-            PrimaryButton("Done", onDone)
+            PrimaryButton("Done", onDone, colors = rainbowButtonColors())
         }
     }
 }
@@ -113,11 +113,11 @@ private fun CompletionMark() {
             cubicTo(cx - r * 0.32f, cy - r * 0.94f, cx - r * 0.85f, cy - r * 0.46f, cx - r * 0.95f, cy + r * 0.16f)
             close()
         }
-        val ribbons = listOf(Color(0xFF49AEEF), Color(0xFFA388E3), Color(0xFFEB8EAC)).map { hue ->
+        val ribbons = listOf(Color(0xFFE7AB87), Color(0xFFA388E3), Color(0xFFEB8EAC)).map { hue ->
             Brush.linearGradient(listOf(hue.copy(alpha = 0.36f), hue),
                 Offset(cx - r, cy), Offset(cx + r * 0.4f, cy - r))
         }
-        val enamel = Brush.linearGradient(listOf(Color(0xFF2787EB), Color(0xFF1659CD)),
+        val enamel = Brush.linearGradient(listOf(Color(0xFF965C80), Color(0xFF56354D)),
             Offset(cx, cy - r * 0.48f), Offset(cx, cy + r * 0.48f))
         val check = Path().apply {
             moveTo(cx - r * 0.18f, cy)
