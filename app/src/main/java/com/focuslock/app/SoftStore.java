@@ -107,7 +107,7 @@ final class SoftStore {
         SessionClock clock = new SessionClock(context);
         TimedDeadline current = deadline(clock, false);
         long remaining = current.elapsedEnd - clock.elapsed;
-        if (remaining <= 0 || minutes < 1 || minutes > Rule.DAY) return false;
+        if (remaining <= 0 || minutes < 1 || minutes > Rule.MAX_LOCK_MINUTES) return false;
         putDeadline(prefs.edit(), clock.start(remaining + minutes * Rule.MINUTE)).apply();
         return true;
     }

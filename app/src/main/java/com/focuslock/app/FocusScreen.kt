@@ -174,7 +174,8 @@ private fun HardWorkspace(activity: MainActivity, state: FocusSnapshot) {
         val end = now + minutes * Rule.MINUTE
         val release = remember(state.hard, end) { activity.releaseAfter(state.hard, end, now) }
         SessionCard(activity.quickDuration, { activity.sheet = "duration" },
-            if (state.admin && state.secure) "Start ${minutes}-min lock" else "Set up Hard Lock", { activity.startHard() }) {
+            if (!state.admin || !state.secure) "Set up Hard Lock"
+            else if (minutes > Rule.DAY) "Start ${minutes / Rule.DAY}-day lock" else "Start ${minutes}-min lock", { activity.startHard() }) {
             Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                 Text(activity.unlockLabel(release, now), style = MaterialTheme.typography.titleMedium,
                     color = MaterialTheme.colorScheme.onPrimaryContainer)

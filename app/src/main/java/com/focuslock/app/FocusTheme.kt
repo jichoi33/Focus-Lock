@@ -171,13 +171,14 @@ internal fun DurationFields(value: DurationInput, onChange: (DurationInput) -> U
     val total = value.total ?: 30
     val hours = total / 60
     val minutes = total % 60
-    val maximumHours = Rule.DAY / 60
+    val wholeDays = total > Rule.DAY
+    val hourStep = if (wholeDays) 23 + total / Rule.DAY else hours
     val minimumMinutes = if (hours == 0) 1 else 0
-    val maximumMinutes = if (hours == maximumHours) 0 else 59
+    val maximumMinutes = if (hours >= 24) 0 else 59
     val rowHeight = with(LocalDensity.current) { (36.sp.toDp() + 12.dp).coerceAtLeast(48.dp) }
     Column(Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally) {
         Row(Modifier.widthIn(max = 320.dp).fillMaxWidth()) {
-            for (label in listOf("Hours", "Minutes")) {
+            for (label in if (wholeDays) listOf("Days") else listOf("Hours", "Minutes")) {
                 Box(Modifier.weight(1f), contentAlignment = Alignment.Center) {
                     Text(label, style = MaterialTheme.typography.labelMedium, color = colors.onSurfaceVariant)
                 }
@@ -186,12 +187,24 @@ internal fun DurationFields(value: DurationInput, onChange: (DurationInput) -> U
         Box(Modifier.widthIn(max = 320.dp).fillMaxWidth(), contentAlignment = Alignment.Center) {
             Spacer(Modifier.fillMaxWidth().height(rowHeight).background(colors.primaryContainer, MaterialTheme.shapes.large))
             Row(Modifier.fillMaxWidth()) {
-                DurationWheel("Hours", hours, 0..maximumHours, rowHeight, Modifier.weight(1f)) { next ->
-                    onChange(DurationInput.of((next * 60 + minutes).coerceIn(1, Rule.DAY)))
+                DurationWheel(if (wholeDays) "Days" else "Hours", hourStep, 0..(23 + Rule.MAX_LOCK_DAYS),
+                    rowHeight, Modifier.weight(1f), format = { step ->
+                        when {
+                            step > 24 -> "${step - 23} days"
+                            step == 24 -> "24 hr"
+                            else -> step.toString()
+                        }
+                    }) { step ->
+                    val next = when {
+                        step > 24 -> (step - 23) * Rule.DAY
+                        step == 24 -> Rule.DAY
+                        else -> (step * 60 + minutes).coerceAtLeast(1)
+                    }
+                    onChange(DurationInput.of(next))
                 }
-                key(minimumMinutes, maximumMinutes) {
+                if (!wholeDays) key(minimumMinutes, maximumMinutes) {
                     DurationWheel("Minutes", minutes, minimumMinutes..maximumMinutes, rowHeight,
-                        Modifier.weight(1f), twoDigits = true) { next ->
+                        Modifier.weight(1f), format = { it.toString().padStart(2, '0') }) { next ->
                         onChange(DurationInput.of(hours * 60 + next))
                     }
                 }
@@ -202,7 +215,7 @@ internal fun DurationFields(value: DurationInput, onChange: (DurationInput) -> U
 
 @Composable
 private fun DurationWheel(label: String, value: Int, range: IntRange, rowHeight: Dp, modifier: Modifier,
-                          twoDigits: Boolean = false, onValueChange: (Int) -> Unit) {
+                          format: (Int) -> String, onValueChange: (Int) -> Unit) {
     val colors = MaterialTheme.colorScheme
     val pager = rememberPagerState(initialPage = value - range.first) { range.last - range.first + 1 }
     val listener by rememberUpdatedState(onValueChange)
@@ -233,7 +246,7 @@ private fun DurationWheel(label: String, value: Int, range: IntRange, rowHeight:
         state = pager,
         modifier = modifier.height(rowHeight * 3).clearAndSetSemantics {
             contentDescription = label
-            stateDescription = value.toString()
+            stateDescription = format(value)
             if (range.first != range.last) {
                 progressBarRangeInfo = ProgressBarRangeInfo(value.toFloat(), range.first.toFloat()..range.last.toFloat(),
                     steps = range.last - range.first - 1)
@@ -252,7 +265,7 @@ private fun DurationWheel(label: String, value: Int, range: IntRange, rowHeight:
         val number = index + range.first
         Box(Modifier.fillMaxSize().clickable { scope.launch { pager.animateScrollToPage(index) } },
             contentAlignment = Alignment.Center) {
-            Text(if (twoDigits) number.toString().padStart(2, '0') else number.toString(),
+            Text(format(number),
                 modifier = Modifier.graphicsLayer {
                     val distance = abs(index - pager.currentPage - pager.currentPageOffsetFraction).coerceAtMost(1f)
                     scaleX = 1f - 0.22f * distance

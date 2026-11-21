@@ -42,7 +42,10 @@ internal data class DurationInput(val hours: String = "0", val minutes: String =
         get() {
             val hour = (hours.ifBlank { "0" }).toIntOrNull() ?: return null
             val minute = (minutes.ifBlank { "0" }).toIntOrNull() ?: return null
-            return (hour * 60 + minute).takeIf { hour in 0..24 && minute in 0..59 && it in 1..1440 }
+            if (hour !in 0..(Rule.MAX_LOCK_MINUTES / 60) || minute !in 0..59) return null
+            return (hour * 60 + minute).takeIf {
+                it in 1..Rule.DAY || (it <= Rule.MAX_LOCK_MINUTES && it > Rule.DAY && it % Rule.DAY == 0)
+            }
         }
 
     companion object {
@@ -109,6 +112,7 @@ internal fun repeatingDaysLabel(mask: Int): String = repeatDayPresets[mask]
     ?: focusDays.filterIndexed { index, _ -> mask and (1 shl index) != 0 }.joinToString(", ")
 
 internal fun durationLabel(total: Int): String = when {
+    total > Rule.DAY && total % Rule.DAY == 0 -> "${total / Rule.DAY} days"
     total < 60 -> "${total} min"
     total % 60 == 0 -> "${total / 60} hr"
     else -> "${total / 60} hr ${total % 60} min"
@@ -832,7 +836,7 @@ class MainActivity : ComponentActivity() {
         }
     }
 
-    private fun invalidDuration() = notify("Choose a duration from 1 minute to 24 hours.")
+    private fun invalidDuration() = notify("Choose a duration from 1 minute to ${Rule.MAX_LOCK_DAYS} days.")
     internal fun notify(message: String) = Toast.makeText(this, message, Toast.LENGTH_LONG).show()
 }
 

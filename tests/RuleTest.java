@@ -134,7 +134,21 @@ public final class RuleTest {
         equal(0, Rule.finalRelease(Collections.singletonList(continuous), state(continuous, now).latestActive(), now, 0L, -1, SEOUL),
                 "continuous schedules have no release in the preview horizon");
 
-        System.out.println("45 scheduling assertions passed");
+        long weekEnd = now + Rule.MAX_LOCK_MINUTES * Rule.MINUTE;
+        Rule followOn = new Rule();
+        followOn.from = weekEnd;
+        followOn.to = weekEnd + 30 * Rule.MINUTE;
+        equal(followOn.to, state(followOn, now).releaseAfter(weekEnd, now, SEOUL).end,
+                "a full-week timer ends after the adjacent scheduled lock");
+        equal(0, state(continuous, now).releaseAfter(weekEnd, now, SEOUL).end,
+                "a full-week timer still detects a continuous repeating lock");
+        ZoneId eastern = ZoneId.of("America/New_York");
+        long beforeDst = ZonedDateTime.parse("2026-03-07T12:00:00-05:00[America/New_York]").toInstant().toEpochMilli();
+        long elapsedWeek = beforeDst + 7L * Rule.DAY * Rule.MINUTE;
+        equal(elapsedWeek, new Rule.State().releaseAfter(elapsedWeek, beforeDst, eastern).end,
+                "seven elapsed days show an exact unlock across spring daylight saving");
+
+        System.out.println("48 scheduling assertions passed");
 
     }
 

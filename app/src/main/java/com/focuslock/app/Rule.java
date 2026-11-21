@@ -9,6 +9,8 @@ import java.util.UUID;
 
 final class Rule {
     static final int DAY = 24 * 60;
+    static final int MAX_LOCK_DAYS = 7;
+    static final int MAX_LOCK_MINUTES = MAX_LOCK_DAYS * DAY;
     static final long MINUTE = 60_000L;
     static final String QUICK_ID = "quick";
 
@@ -139,7 +141,10 @@ final class Rule {
                     extension = window;
                 }
             }
-            long horizon = Instant.ofEpochMilli(start).atZone(zone).plusDays(7).toInstant().toEpochMilli();
+            // A multi-day timer can reach the usual preview boundary before a
+            // weekly schedule extends it. Upcoming occurrences cover fourteen days.
+            int previewDays = initialEnd - start > DAY * MINUTE ? 14 : 7;
+            long horizon = Instant.ofEpochMilli(start).atZone(zone).plusDays(previewDays).toInstant().toEpochMilli();
             return new Release(end > horizon ? 0L : end, extension);
         }
 

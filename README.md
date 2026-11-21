@@ -29,7 +29,7 @@
 3. Open Focus Lock, choose a mode, and follow the permission prompts. If Android blocks the Soft Lock service for a sideloaded app, open Focus Lock's Android **App info** screen and choose **Allow restricted settings** from the menu.
 4. Run **Test for 1 minute** before starting a longer lock. For Hard Lock, wake the screen and expand the lock screen notification to find **End test**. For Soft Lock, **End test** is available in the app or on the block screen.
 
-Tap **Edit** next to the timer, then scroll **Hours** and **Minutes** to set a duration. You can also tap **15 min**, **30 min**, or **1 hr**.
+Tap **Edit** next to the timer, then scroll **Hours** and **Minutes** to set a duration. Scroll past **24 hr** to choose **2–7 days** in one-day steps. Each day is 24 hours. You can also tap **15 min**, **30 min**, or **1 hr**.
 
 To update, open the latest signed APK over your existing release. Android uses the app ID and signing certificate to decide whether it can install the update in place. Enable lock screen notifications if you want to see the Hard Lock countdown and emergency controls.
 

@@ -56,7 +56,7 @@ internal fun WorkspaceDialogs(activity: MainActivity, state: FocusSnapshot) {
             var value by remember { mutableStateOf(if (hard) activity.quickDuration else activity.softDuration) }
             var presetRevision by remember { mutableIntStateOf(0) }
             FocusDialog("Session duration", close, {
-                if (value.total == null) activity.notify("Enter a duration between 1 minute and 24 hours.")
+                if (value.total == null) activity.notify("Enter a duration between 1 minute and ${Rule.MAX_LOCK_DAYS} days.")
                 else {
                     if (hard) activity.quickDuration = value else activity.softDuration = value
                     close()
@@ -589,7 +589,7 @@ private fun SitesDialog(
 private fun ScheduleDialog(activity: MainActivity, rule: Rule) {
     val repeating = rule.repeats()
     val originalName = rule.name.orEmpty().takeUnless { repeating && it == DEFAULT_REPEAT_NAME }.orEmpty()
-    val originalDuration = DurationInput.of(rule.requestedDuration().coerceIn(1, Rule.DAY))
+    val originalDuration = DurationInput.of(rule.requestedDuration().coerceIn(1, Rule.MAX_LOCK_MINUTES))
     var name by rememberSaveable { mutableStateOf(originalName) }
     var preset by rememberSaveable { mutableStateOf(rule.days.takeIf { it in repeatDayPresets }) }
     var customDays by rememberSaveable { mutableStateOf(rule.days.takeUnless { it in repeatDayPresets }) }

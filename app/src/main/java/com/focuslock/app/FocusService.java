@@ -27,7 +27,7 @@ public final class FocusService extends Service {
     static final String BREAK = "com.focuslock.app.BREAK";
     static final String END_TEST = "com.focuslock.app.END_HARD_TEST";
     static final String EXTEND = "com.focuslock.app.EXTEND";
-    static final long MAX_QUICK = 24 * 60 * Rule.MINUTE;
+    static final long MAX_QUICK = Rule.MAX_LOCK_MINUTES * Rule.MINUTE;
     private static final int NOTIFICATION_ID = 81;
     private static final int WAITING_NOTICE_ID = 88;
     private static final long UNLOCK_RETRY_MS = 50;
