@@ -26,6 +26,7 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.core.os.bundleOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import java.time.ZoneId
@@ -156,7 +157,7 @@ class MainActivity : ComponentActivity() {
             update()
         }
     }
-    internal var completionResults by mutableStateOf(emptyList<CompletedFocus>())
+    internal var completionMillis by mutableLongStateOf(0L)
         private set
     internal var completedModes by mutableIntStateOf(0)
         private set
@@ -384,9 +385,10 @@ class MainActivity : ComponentActivity() {
 
     private fun updateCompletion() {
         completedModes = completionStore.pending()
-        completionResults = listOf(SessionCompletion.HARD, SessionCompletion.SOFT)
-            .filter { completedModes and it != 0 }
-            .map { CompletedFocus(it, completionStore.description(it), completionStore.protectedMillis(it)) }
+        completionMillis = when (completedModes) {
+            SessionCompletion.HARD, SessionCompletion.SOFT -> completionStore.protectedMillis(completedModes)
+            else -> 0L
+        }
     }
 
     internal fun dismissCompletion() {

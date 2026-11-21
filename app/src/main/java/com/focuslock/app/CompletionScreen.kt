@@ -31,16 +31,13 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 
-internal data class CompletedFocus(val mode: Int, val name: String, val millis: Long) {
-    val timeLabel: String?
-        get() = if (millis <= 0) null
-            else if (millis < Rule.MINUTE) "Less than 1 min focused"
-            else "${durationLabel((millis / Rule.MINUTE).toInt())} focused"
-}
-
 @Composable
-internal fun CompletionScreen(modes: Int, results: List<CompletedFocus>, onDone: () -> Unit) {
-    val accent = rainbowAccent()
+internal fun CompletionScreen(modes: Int, protectedMillis: Long, onDone: () -> Unit) {
+    val headline = when {
+        protectedMillis <= 0 -> "Nicely done."
+        protectedMillis < Rule.MINUTE -> "Less than 1 min focused"
+        else -> "${durationLabel((protectedMillis / Rule.MINUTE).toInt())} focused"
+    }
     val modeLabel = when (modes) {
         SessionCompletion.HARD -> "Hard Lock complete"
         SessionCompletion.SOFT -> "Soft Lock complete"
@@ -61,31 +58,12 @@ internal fun CompletionScreen(modes: Int, results: List<CompletedFocus>, onDone:
                 ) {
                     CompletionMark()
                     Spacer(Modifier.height(12.dp))
-                    val singleResult = results.singleOrNull()
-                    Text(singleResult?.timeLabel ?: "Nicely done.", Modifier.semantics { heading() },
+                    Text(headline, Modifier.semantics { heading() },
                         style = MaterialTheme.typography.headlineLarge, textAlign = TextAlign.Center)
                     Spacer(Modifier.height(6.dp))
-                    Text(modeLabel, style = MaterialTheme.typography.labelLarge, color = accent,
+                    Text(modeLabel, style = MaterialTheme.typography.labelLarge, color = rainbowAccent(),
                         textAlign = TextAlign.Center)
-                    results.forEach { result ->
-                        val name = result.name.takeUnless { it.isBlank() || (result.mode == SessionCompletion.HARD && it == "Hard Lock") }
-                        if (singleResult != null) {
-                            if (name != null) {
-                                Spacer(Modifier.height(12.dp))
-                                Text(name, style = MaterialTheme.typography.titleMedium, textAlign = TextAlign.Center)
-                            }
-                        } else if (result.timeLabel != null || name != null) {
-                            val mode = if (result.mode == SessionCompletion.HARD) "Hard Lock" else "Soft Lock"
-                            Spacer(Modifier.height(16.dp))
-                            Text(mode, style = MaterialTheme.typography.labelMedium, color = accent)
-                            result.timeLabel?.let {
-                                Text(it, style = MaterialTheme.typography.titleLarge, textAlign = TextAlign.Center)
-                            }
-                            name?.let {
-                                Text(it, style = MaterialTheme.typography.bodyMedium, textAlign = TextAlign.Center)
-                            }
-                        }
-                    }
+
                 }
             }
             Spacer(Modifier.height(12.dp))
@@ -139,5 +117,5 @@ private fun CompletionMark() {
 @Preview(showBackground = true, widthDp = 390, heightDp = 740)
 @Composable
 private fun CompletionPreview() {
-    FocusTheme { CompletionScreen(SessionCompletion.HARD, listOf(CompletedFocus(SessionCompletion.HARD, "Evening focus", 45 * Rule.MINUTE))) {} }
+    FocusTheme { CompletionScreen(SessionCompletion.HARD, 45 * Rule.MINUTE) {} }
 }

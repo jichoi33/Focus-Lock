@@ -38,7 +38,7 @@ internal fun FocusWorkspace(activity: MainActivity) {
     val showCompletion = completed != 0 && !hardActive && !state.keyguardLocked
     if (showCompletion && !dialogOpen) {
         BackHandler(onBack = activity::dismissCompletion)
-        CompletionScreen(completed, activity.completionResults, activity::dismissCompletion)
+        CompletionScreen(completed, activity.completionMillis, activity::dismissCompletion)
         return
     }
     val colors = MaterialTheme.colorScheme
@@ -73,7 +73,7 @@ internal fun FocusWorkspace(activity: MainActivity) {
             onDismissRequest = activity::dismissCompletion,
             properties = DialogProperties(usePlatformDefaultWidth = false, decorFitsSystemWindows = false)
         ) {
-            CompletionScreen(completed, activity.completionResults, activity::dismissCompletion)
+            CompletionScreen(completed, activity.completionMillis, activity::dismissCompletion)
         }
     }
 }
