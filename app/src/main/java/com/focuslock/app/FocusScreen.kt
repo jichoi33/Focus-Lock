@@ -229,7 +229,7 @@ private fun ScheduleHeading(onAdd: () -> Unit) {
 @Composable
 private fun SessionCard(duration: DurationInput, edit: () -> Unit, label: String, start: () -> Unit,
                         rules: (@Composable () -> Unit)? = null) {
-    TimerCard(rainbow = true) {
+    TimerCard {
         Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
             Row(Modifier.fillMaxWidth().clickable(onClickLabel = "Edit duration", onClick = edit),
                 verticalAlignment = Alignment.CenterVertically) {
@@ -239,11 +239,11 @@ private fun SessionCard(duration: DurationInput, edit: () -> Unit, label: String
                         style = TextStyle(fontSize = 48.sp, lineHeight = 54.sp, letterSpacing = (-2).sp,
                             fontWeight = FontWeight.Medium, fontFeatureSettings = "'tnum'"))
                 }
-                Text("Edit", style = MaterialTheme.typography.labelLarge, color = rainbowAccent())
+                Text("Edit", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary)
             }
             rules?.invoke()
         }
-        PrimaryButton(label, start, colors = rainbowButtonColors())
+        PrimaryButton(label, start)
     }
 }
 
@@ -453,7 +453,7 @@ internal fun InsetDivider() = HorizontalDivider(Modifier.padding(horizontal = 16
 @Composable
 private fun RunningCard(title: String, end: Long, detail: String, showCountdown: Boolean = true,
                         actions: @Composable () -> Unit) {
-    TimerCard(rainbow = true) {
+    TimerCard {
         CardHeading("Clock", title)
         if (showCountdown) {
             val time by produceState(initialValue = SystemClock.elapsedRealtime(), end) {

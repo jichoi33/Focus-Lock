@@ -2,10 +2,10 @@ package com.focuslock.app
 
 import android.animation.ValueAnimator
 import androidx.compose.animation.core.*
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawWithCache
-import androidx.compose.ui.geometry.Size
-import androidx.compose.ui.graphics.drawscope.translate
+import androidx.compose.ui.graphics.ImageBitmap
+import androidx.compose.ui.res.imageResource
+import androidx.compose.ui.graphics.drawscope.withTransform
 import androidx.compose.ui.platform.LocalInspectionMode
 import android.media.AudioAttributes
 import android.os.VibrationEffect
@@ -29,7 +29,6 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.StrokeJoin
@@ -130,38 +129,36 @@ internal fun GroupCard(modifier: Modifier = Modifier, content: @Composable Colum
 
 @Composable
 internal fun Modifier.focusRainbow(): Modifier {
-    val dark = isSystemInDarkTheme()
-    val stops = remember(dark) {
-        if (dark) listOf(Color(0xFF3B1D42), Color(0xFF452D25), Color(0xFF36361B), Color(0xFF153F39),
-            Color(0xFF192E50), Color(0xFF302447))
-        else listOf(Color(0xFFFFD5E5), Color(0xFFFFE0C9), Color(0xFFFFEEB8), Color(0xFFC7F1DC),
-            Color(0xFFCBE8FF), Color(0xFFE3D7FF))
-    }
+    val swirl = ImageBitmap.imageResource(R.drawable.focus_rainbow)
     val motion = !LocalInspectionMode.current && ValueAnimator.areAnimatorsEnabled()
-    val drift = if (motion) rememberInfiniteTransition(label = "Rainbow background").animateFloat(
-        initialValue = -1f, targetValue = 1f,
-        animationSpec = infiniteRepeatable(tween(9500, easing = FastOutSlowInEasing), RepeatMode.Reverse),
-        label = "Color drift"
+    val angle = if (motion) rememberInfiniteTransition(label = "Rainbow swirl").animateFloat(
+        initialValue = 0f, targetValue = 360f,
+        animationSpec = infiniteRepeatable(tween(9000, easing = LinearEasing)),
+        label = "Color rotation"
     ) else null
     return drawWithCache {
-        val dx = size.width * 0.22f
-        val dy = size.height * 0.16f
-        val brush = Brush.linearGradient(stops, Offset(dx, dy), Offset(dx + size.width, dy + size.height))
-        val extent = Size(size.width + 2 * dx, size.height + 2 * dy)
+        // The viewport fits inside the texture's inscribed circle at every angle.
+        val scaleX = size.width * 1.45f / swirl.width
+        val scaleY = size.height * 1.45f / swirl.height
         onDrawBehind {
-            val shift = drift?.value ?: 0f
-            translate(dx * (shift - 1f), dy * (shift - 1f)) { drawRect(brush, size = extent) }
+            withTransform({
+                translate(center.x, center.y)
+                scale(scaleX, scaleY, Offset.Zero)
+                rotate(angle?.value ?: 0f, Offset.Zero)
+            }) {
+                drawImage(swirl, topLeft = Offset(-swirl.width / 2f, -swirl.height / 2f))
+            }
         }
     }
 }
 
 @Composable
-internal fun TimerCard(modifier: Modifier = Modifier, rainbow: Boolean = false, content: @Composable ColumnScope.() -> Unit) {
+internal fun TimerCard(modifier: Modifier = Modifier, content: @Composable ColumnScope.() -> Unit) {
     val colors = MaterialTheme.colorScheme
     val shape = RoundedCornerShape(28.dp)
     Column(
         modifier.fillMaxWidth()
-            .then(if (rainbow) Modifier.clip(shape).focusRainbow() else Modifier.background(colors.primaryContainer, shape))
+            .background(colors.primaryContainer, shape)
             .padding(20.dp),
         verticalArrangement = Arrangement.spacedBy(15.dp),
         content = content
