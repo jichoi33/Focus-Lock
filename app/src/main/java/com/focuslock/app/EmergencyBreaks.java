@@ -6,18 +6,21 @@ import java.util.Collections;
 import java.util.HashSet;
 import java.util.Set;
 
-/** A quota belongs to a session, shared by overlapping locks. All callers run on the main thread. */
+/** A quota renews every 24 hours and is shared by overlapping locks. All callers run on the main thread. */
 final class EmergencyBreaks {
+    private static final long DAY_MS = Rule.DAY * Rule.MINUTE;
+
     final int minutes, limit, used;
-    final long until, sessionEnd;
+    final long until, sessionEnd, nextReset;
     final boolean enabled;
 
-    private EmergencyBreaks(int minutes, int limit, int used, long until, long sessionEnd, boolean enabled) {
+    private EmergencyBreaks(int minutes, int limit, int used, long until, long sessionEnd, long nextReset, boolean enabled) {
         this.minutes = minutes;
         this.limit = limit;
         this.used = used;
         this.until = until;
         this.sessionEnd = sessionEnd;
+        this.nextReset = nextReset;
         this.enabled = enabled;
     }
 
@@ -40,13 +43,16 @@ final class EmergencyBreaks {
         SharedPreferences p = prefs(c);
         Set<String> active = new HashSet<>();
         long end = 0;
+        long start = clock.wall;
         for (Rule.Window window : hard.active) {
             if (window.rule.test) continue;
             active.add(window.key());
+            start = Math.min(start, window.rule.quick() ? window.rule.from : window.start);
             end = Math.max(end, clock.elapsed + window.end - clock.wall);
         }
         if (!soft.test && soft.active(clock.elapsed)) {
             active.add(new SoftStore(c).sessionId());
+            start = Math.min(start, soft.timer.wallEnd - soft.timer.budget);
             end = Math.max(end, soft.timer.elapsedEnd);
         }
         Set<String> previous = p.getStringSet("sessions", Collections.emptySet());
@@ -55,6 +61,33 @@ final class EmergencyBreaks {
         long until = 0;
         SharedPreferences.Editor edit = p.edit();
         boolean changed = !previous.equals(active);
+        long nextReset = Long.MAX_VALUE;
+        if (!active.isEmpty()) {
+            TimedDeadline saved = continuing ? resetTimer(p) : null;
+            long remaining;
+            if (saved == null) {
+                long age = clock.wall - start;
+                if (age >= DAY_MS) used = 0;
+                remaining = DAY_MS - age % DAY_MS;
+            } else {
+                long delta = saved.boot == clock.boot && clock.boot != -1
+                        ? saved.elapsedEnd - clock.elapsed : saved.wallEnd - clock.wall;
+                if (delta <= 0L) {
+                    used = 0;
+                    remaining = DAY_MS + delta % DAY_MS;
+                } else {
+                    remaining = Math.min(DAY_MS, delta);
+                }
+            }
+            nextReset = clock.elapsed + remaining;
+            if (saved == null || saved.boot != clock.boot || saved.elapsedEnd != nextReset) {
+                storeReset(edit, clock.start(remaining));
+                changed = true;
+            }
+        } else if (p.contains("reset_wall")) {
+            edit.remove("reset_wall").remove("reset_elapsed").remove("reset_boot");
+            changed = true;
+        }
         if (changed) edit.putStringSet("sessions", active).putInt("used", used);
         if (p.contains("wall")) {
             TimedDeadline timer = new TimedDeadline(p.getInt("boot", -1), p.getLong("elapsed", 0),
@@ -66,7 +99,8 @@ final class EmergencyBreaks {
             } else { edit.remove("wall"); changed = true; }
         }
         if (changed) edit.apply();
-        return new EmergencyBreaks(p.getInt("minutes", 2), p.getInt("limit", 3), used, until, end,
+        if (nextReset >= end) nextReset = Long.MAX_VALUE;
+        return new EmergencyBreaks(p.getInt("minutes", 2), p.getInt("limit", 3), used, until, end, nextReset,
                 new FocusStore(c).emergencyAllowed());
     }
 
@@ -74,10 +108,24 @@ final class EmergencyBreaks {
         edit.putLong("wall", t.wallEnd).putLong("elapsed", t.elapsedEnd).putInt("boot", t.boot).putLong("budget", t.budget);
     }
 
+    private static TimedDeadline resetTimer(SharedPreferences p) {
+        return !p.contains("reset_wall") ? null : new TimedDeadline(p.getInt("reset_boot", -1),
+                p.getLong("reset_elapsed", 0), p.getLong("reset_wall", 0), DAY_MS);
+    }
+
+    private static void storeReset(SharedPreferences.Editor edit, TimedDeadline timer) {
+        edit.putInt("reset_boot", timer.boot).putLong("reset_elapsed", timer.elapsedEnd).putLong("reset_wall", timer.wallEnd);
+    }
+
     static void rebase(Context c) {
         SharedPreferences p = prefs(c);
-        if (!p.contains("wall")) return;
         SessionClock clock = new SessionClock(c);
+        TimedDeadline reset = resetTimer(p);
+        if (reset != null && reset.boot == clock.boot) {
+            // Keep elapsed time authoritative when the user changes the wall clock.
+            prefs(c).edit().putLong("reset_wall", clock.wall + reset.elapsedEnd - clock.elapsed).apply();
+        }
+        if (!p.contains("wall")) return;
         TimedDeadline saved = new TimedDeadline(p.getInt("boot", -1), p.getLong("elapsed", 0),
                 p.getLong("wall", 0), p.getLong("budget", 0));
         SharedPreferences.Editor edit = p.edit();

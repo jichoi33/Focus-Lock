@@ -90,6 +90,7 @@ public final class SoftBlocker extends AccessibilityService {
     private final CoverRelease release = new CoverRelease();
     private final AppReturn appReturn = new AppReturn();
     private long breakUntil;
+    private long breakReset;
     private long noticeMidnight;
     static void refreshDeadlineNotice() {
         if (connected != null) connected.updateNotice();
@@ -179,7 +180,9 @@ public final class SoftBlocker extends AccessibilityService {
         detectedBrowsers = inspectBrowsers ? AppCatalog.browsers(this) : java.util.Collections.emptySet();
         customTabWindow = -1;
         navigation.reset();
-        breakUntil = EmergencyBreaks.current(this).until;
+        EmergencyBreaks breaks = EmergencyBreaks.current(this);
+        breakUntil = breaks.until;
+        breakReset = breaks.nextReset;
         updateNotice();
         handler.removeCallbacks(update);
         queued = false;
@@ -234,8 +237,10 @@ public final class SoftBlocker extends AccessibilityService {
             }
         }
         boolean hardActive = now < FocusService.settingsBlockedUntil;
-        if (breakUntil > 0 && breakUntil <= now) {
-            breakUntil = EmergencyBreaks.current(this).until;
+        if ((breakUntil > 0 && breakUntil <= now) || (softActive && now >= breakReset)) {
+            EmergencyBreaks breaks = EmergencyBreaks.current(this);
+            breakUntil = breaks.until;
+            breakReset = breaks.nextReset;
             updateNotice();
             reportChange();
         }
@@ -254,7 +259,7 @@ public final class SoftBlocker extends AccessibilityService {
         else if (navigationUntil > now) delay = navigationUntil - now;
         else delay = checkForeground(now, softActive && !paused, hardActive || (paused && softActive));
         if (paused) delay = Math.min(delay, breakUntil - now);
-        if (softActive) delay = Math.min(delay, session.timer.elapsedEnd - now);
+        if (softActive) delay = Math.min(delay, Math.min(session.timer.elapsedEnd, breakReset) - now);
         if (hardActive) delay = Math.min(delay, FocusService.settingsBlockedUntil - now);
         handler.postDelayed(update, Math.max(1, delay));
     }

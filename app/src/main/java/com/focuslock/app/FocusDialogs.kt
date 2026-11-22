@@ -309,7 +309,7 @@ private fun SettingsDialog(activity: MainActivity, state: FocusSnapshot, close: 
             verticalArrangement = Arrangement.spacedBy(12.dp)) {
             val b = state.breaks
             Text("Session preferences", style = MaterialTheme.typography.titleMedium)
-            GroupCard { ActionRow("Emergency breaks", if (b.enabled) "${b.minutes} min each, ${b.limit} per session" else "Off", icon = "Clock") {
+            GroupCard { ActionRow("Emergency breaks", if (b.enabled) "${b.minutes} min each, ${b.limit} per 24 hours" else "Off", icon = "Clock") {
                 activity.sheet = "breaks"
             } }
             if (!state.secure || !state.admin || !state.alarms) {
@@ -376,10 +376,11 @@ private fun BreaksDialog(activity: MainActivity, state: FocusSnapshot, close: ()
                 OutlinedTextField(minutes, { if (it.length <= 2 && it.all(Char::isDigit)) minutes = it },
                     label = { Text("Minutes per break") }, enabled = !locked, singleLine = true, keyboardOptions = keyboard, modifier = Modifier.fillMaxWidth())
                 OutlinedTextField(uses, { if (it.length <= 2 && it.all(Char::isDigit)) uses = it },
-                    label = { Text("Breaks per session") }, enabled = !locked, singleLine = true, keyboardOptions = keyboard, modifier = Modifier.fillMaxWidth())
+                    label = { Text("Breaks per 24 hours") }, enabled = !locked, singleLine = true, keyboardOptions = keyboard, modifier = Modifier.fillMaxWidth())
             }
             Caption(if (locked) "Change these limits after your session ends." else "Your session timer keeps running during a break.")
             if (enabled) {
+                Caption("Breaks refill every 24 hours from the start of a continuing lock.")
                 Caption("During Soft Lock, tap Emergency break in Focus Lock or its expanded notification.")
                 Caption("During Hard Lock, expand its lock screen notification to find Emergency break.")
             }

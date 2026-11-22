@@ -260,7 +260,7 @@ private fun BreakRow(activity: MainActivity, state: FocusSnapshot) {
     val available = left > 0 && b.until <= SystemClock.elapsedRealtime()
     if (available) GroupCard {
         ActionRow("Emergency break", "${b.minutes} min each, $left of ${b.limit} left", icon = "Clock", onClick = activity::offerBreak)
-    } else Caption(if (left == 0) "All ${b.limit} breaks used for this session." else "$left of ${b.limit} breaks left.")
+    } else Caption(if (left == 0) "All ${b.limit} breaks used for this 24-hour period." else "$left of ${b.limit} breaks left.")
 }
 
 @Composable

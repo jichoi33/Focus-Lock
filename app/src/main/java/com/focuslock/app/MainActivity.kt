@@ -389,7 +389,9 @@ class MainActivity : ComponentActivity() {
         val hardDelay = if (windows.next == Long.MAX_VALUE) Long.MAX_VALUE else windows.next - clock.wall
         val softDelay = if (soft.active(clock.elapsed)) soft.timer.elapsedEnd - clock.elapsed else Long.MAX_VALUE
         val until = snapshot?.breaks?.until ?: 0L
-        val nextDelay = minOf(hardDelay, softDelay, if (until > clock.elapsed) until - clock.elapsed else Long.MAX_VALUE)
+        val reset = snapshot?.breaks?.nextReset ?: Long.MAX_VALUE
+        val nextDelay = minOf(hardDelay, softDelay, if (reset != Long.MAX_VALUE) reset - clock.elapsed else Long.MAX_VALUE,
+            if (until > clock.elapsed) until - clock.elapsed else Long.MAX_VALUE)
         if (nextDelay != Long.MAX_VALUE) handler.postDelayed(updateBoundary, nextDelay.coerceAtLeast(1L))
     }
 

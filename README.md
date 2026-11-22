@@ -55,7 +55,7 @@ Schedules show the time range and start days for each repeating lock. Tap an ina
 
 ### Emergency breaks
 
-Emergency breaks let you pause either lock temporarily while its countdown continues. Configure the duration and number of breaks in Focus Lock settings before starting. For Hard Lock, expand the lock screen notification. For Soft Lock, tap **Emergency break** in the app or its expanded countdown notification, then confirm **Take break**. Blocking resumes automatically at the end of the break.
+Emergency breaks let you pause either lock temporarily while its countdown continues. Configure the duration and number of breaks in Focus Lock settings before starting. During a continuing lock, the break allowance refills every 24 hours from when the lock started. Unused breaks do not carry over. For Hard Lock, expand the lock screen notification. For Soft Lock, tap **Emergency break** in the app or its expanded countdown notification, then confirm **Take break**. Blocking resumes automatically at the end of the break.
 
 ### Soft Lock rules
 

@@ -141,6 +141,7 @@ public final class FocusService extends Service {
         SessionClock clock = new SessionClock(this);
         Rule.State state = store.state(clock);
         EmergencyBreaks breaks = EmergencyBreaks.read(this, clock, state, new SoftStore(this).read());
+        state.nextElapsed = Math.min(state.nextElapsed, breaks.nextReset);
         if (breaks.until > clock.elapsed) state.nextElapsed = Math.min(state.nextElapsed, breaks.until);
         if (state.nextWall != scheduledWall || state.nextElapsed != scheduledElapsed) {
             AlarmReceiver.schedule(this, state);
@@ -188,11 +189,11 @@ public final class FocusService extends Service {
         history.sample(clock.elapsed, paused ? 0 : regularEnd, sessions);
         setEnforcedUntil(protectionEnd);
         if (paused) {
-            handler.postDelayed(tick, Math.max(1, Math.min(breaks.until - clock.elapsed, state.next - clock.wall)));
+            handler.postDelayed(tick, Math.max(1, Math.min(state.nextElapsed - clock.elapsed, state.next - clock.wall)));
             return;
         }
         scheduleUnlockCheck();
-        handler.postDelayed(tick, Math.max(1, Math.min(10_000, state.next - clock.wall)));
+        handler.postDelayed(tick, Math.max(1, Math.min(10_000, Math.min(state.next - clock.wall, state.nextElapsed - clock.elapsed))));
     }
 
     private boolean handleCompletion(SessionClock clock, boolean justUnlocked) {
