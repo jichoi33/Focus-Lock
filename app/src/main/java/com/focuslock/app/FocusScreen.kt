@@ -191,11 +191,7 @@ private fun HardWorkspace(activity: MainActivity, state: FocusSnapshot) {
         }
     }
 
-    if (!state.hardLockScreen && state.hard.active.isEmpty()) GroupCard {
-        ActionRow("Check lock screen notifications", "Required to see Emergency break", icon = "Lock") {
-            activity.sheet = "lock_notifications"
-        }
-    }
+    if (state.hard.active.isEmpty()) LockNotificationSetup(activity, state)
 
     ScheduleHeading(activity::openNewSchedule)
     val nextByRule = remember(state.hard) {
@@ -358,7 +354,7 @@ private fun SoftWorkspace(activity: MainActivity, state: FocusSnapshot) {
         }
         TextButton(onClick = { if (empty) activity.sheet = "rules" else activity.startSoft(test = true) },
             modifier = Modifier.fillMaxWidth()) { Text("Test for 1 minute") }
-        if (!state.softNotifications) CountdownPermissionCard(activity, soft = true)
+        LockNotificationSetup(activity, state)
     }
 
     if (android.os.Build.VERSION.SDK_INT >= 33 && !state.accessibility && !session.active(SystemClock.elapsedRealtime())) {
@@ -371,9 +367,10 @@ private fun SoftWorkspace(activity: MainActivity, state: FocusSnapshot) {
 private fun quantity(count: Int, noun: String) = "$count $noun" + if (count == 1) "" else "s"
 
 @Composable
-private fun CountdownPermissionCard(activity: MainActivity, soft: Boolean) {
+internal fun LockNotificationSetup(activity: MainActivity, state: FocusSnapshot) {
+    val step = state.notificationSetup ?: return
     GroupCard {
-        ActionRow("Enable countdown notifications", onClick = { activity.enableNotifications(soft) })
+        ActionRow(step.label, icon = "Lock") { activity.openNotificationSetup(step) }
     }
 }
 

@@ -118,34 +118,6 @@ internal fun WorkspaceDialogs(activity: MainActivity, state: FocusSnapshot) {
             PrimaryButton("Done", close)
         }
         "statistics" -> StatisticsDialog(activity, activity.mode, close)
-        "lock_notifications" -> FocusDialog("Lock screen notifications", close) {
-            Column(Modifier.heightIn(max = dialogBodyHeight()).verticalScroll(rememberScrollState()),
-                verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                Caption("Show notification details on the lock screen. Expand either lock notification to see its controls.")
-                GroupCard {
-                    ActionRow("Hard Lock notification settings", "Enable notifications and pop-up display") {
-                        activity.enableNotifications(false)
-                    }
-                    InsetDivider()
-                    ActionRow("Soft Lock notification settings", "Enable notifications and pop-up display") {
-                        activity.enableNotifications(true)
-                    }
-                    InsetDivider()
-                    ActionRow("Android lock screen settings") { activity.openLockScreenSettings() }
-                    InsetDivider()
-                    ActionRow("Do Not Disturb settings", "Allow Focus Lock as an app exception") {
-                        activity.openSettings("android.settings.ZEN_MODE_SETTINGS")
-                    }
-                }
-                Caption("In Do Not Disturb, allow pop-ups for permitted notifications in your active mode.")
-            }
-            PrimaryButton("Preview pop-up", {
-                close()
-                val soft = activity.mode == FocusMode.Soft
-                if (LockNotifications.available(activity, soft)) LockNotifications.preview(activity, soft)
-                else activity.enableNotifications(soft)
-            })
-        }
         "celebration" -> FocusDialog("Celebration on unlock", close) {
             Caption("Show the celebration when you first unlock after Hard Lock ends. You can also open it from the completion notification.")
             if (!activity.autoCelebration && !SessionCompletion.canOpenOnUnlock(activity)) {
@@ -338,18 +310,10 @@ private fun SettingsDialog(activity: MainActivity, state: FocusSnapshot, close: 
                     activity.sheet = "celebration"
                 }
                 InsetDivider()
-                ActionRow("Lock screen notifications", "Countdowns and Emergency break controls") {
-                    activity.sheet = "lock_notifications"
-                }
-                InsetDivider()
                 ActionRow("Scheduled lock reminders", "5 minutes before Hard Lock",
                     onClick = activity::openScheduleReminderSettings)
             }
-            if (!state.softNotifications) {
-                GroupCard {
-                    ActionRow("Enable Soft Lock notifications") { activity.enableNotifications(soft = true) }
-                }
-            }
+            LockNotificationSetup(activity, state)
             if (!state.accessibility) {
                 Text("Soft Lock", style = MaterialTheme.typography.titleMedium)
                 GroupCard {

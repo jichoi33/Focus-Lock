@@ -85,6 +85,12 @@ internal data class HardStartReview(
         get() = if (unlock != null) "Lock until $unlock" else "Lock phone"
 }
 
+internal enum class NotificationSetup(val label: String) {
+    HardChannel("Enable lock notifications"),
+    SoftChannel("Enable lock notifications"),
+    LockScreen("Show notifications on lock screen")
+}
+
 internal data class FocusSnapshot(
     val rules: List<Rule>,
     val hard: Rule.State,
@@ -96,6 +102,7 @@ internal data class FocusSnapshot(
     val secure: Boolean,
     val admin: Boolean,
     val alarms: Boolean,
+    val notificationSetup: NotificationSetup?,
     val hardLockScreen: Boolean,
     val softNotifications: Boolean,
     val accessibility: Boolean,
@@ -377,12 +384,21 @@ class MainActivity : ComponentActivity() {
         updateCompletion()
         val keyguard = getSystemService(KeyguardManager::class.java)
         val hardEndElapsed = if (windows.active.isEmpty()) 0L else clock.elapsed + (windows.activeEnd() - clock.wall)
+        val hardNotices = LockNotifications.available(this, false)
+        val softNotices = LockNotifications.available(this, true)
+        val hardVisible = hardNotices && LockNotifications.channelVisible(this, FocusService.CHANNEL)
+        val screenVisible = LockNotifications.screenVisible(this)
+        val setup = when {
+            !hardVisible -> NotificationSetup.HardChannel
+            !softNotices || !LockNotifications.channelVisible(this, LockNotifications.SOFT_CHANNEL) -> NotificationSetup.SoftChannel
+            !screenVisible -> NotificationSetup.LockScreen
+            else -> null
+        }
         snapshot = FocusSnapshot(
             rules, windows, hardEndElapsed, FocusService.hardEnforcedUntil > clock.elapsed, keyguard.isKeyguardLocked,
             soft, softStore.sessionId(), keyguard.isDeviceSecure,
             FocusAdmin.enabled(this), AlarmReceiver.canSchedule(this),
-            LockNotifications.hardVisible(this),
-            LockNotifications.available(this, true),
+            setup, hardVisible && screenVisible, softNotices,
             SoftBlocker.enabled(this), SoftBlocker.isConnected(), EmergencyBreaks.read(this, clock, windows, savedSoft)
         )
         handler.removeCallbacks(updateBoundary)
@@ -458,8 +474,12 @@ class MainActivity : ComponentActivity() {
         }
     }
 
-    internal fun enableNotifications(soft: Boolean) {
-        openNotificationSettings(if (soft) LockNotifications.SOFT_CHANNEL else FocusService.CHANNEL)
+    internal fun openNotificationSetup(step: NotificationSetup) {
+        when (step) {
+            NotificationSetup.HardChannel -> openNotificationSettings(FocusService.CHANNEL)
+            NotificationSetup.SoftChannel -> openNotificationSettings(LockNotifications.SOFT_CHANNEL)
+            NotificationSetup.LockScreen -> openLockScreenSettings()
+        }
     }
 
     internal fun openScheduleReminderSettings() {

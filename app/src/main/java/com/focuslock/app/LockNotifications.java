@@ -16,7 +16,6 @@ final class LockNotifications {
     static final String OPEN_SOFT_BREAK = "com.focuslock.app.SHOW_SOFT_BREAK";
     static final String SOFT_CHANNEL = "soft_lock_session";
     private static final int SOFT_ID = 83;
-    private static final int HARD_PREVIEW_ID = 85;
     private static final int COMPLETION_ID = 86;
     private static final String COMPLETION_CHANNEL = "focus_completion";
 
@@ -51,8 +50,12 @@ final class LockNotifications {
                 && channel.getImportance() != NotificationManager.IMPORTANCE_NONE;
     }
 
-    static boolean hardVisible(Context context) {
-        if (!available(context, false)) return false;
+    static boolean channelVisible(Context context, String id) {
+        NotificationChannel channel = context.getSystemService(NotificationManager.class).getNotificationChannel(id);
+        return channel != null && channel.getLockscreenVisibility() != Notification.VISIBILITY_SECRET;
+    }
+
+    static boolean screenVisible(Context context) {
         try {
             return android.provider.Settings.Secure.getInt(
                     context.getContentResolver(), "lock_screen_show_notifications", 1) != 0;
@@ -60,20 +63,6 @@ final class LockNotifications {
             // The device can restrict access to its lock screen preference.
             return true;
         }
-    }
-
-    static void preview(Context context, boolean soft) {
-        if (!available(context, soft)) return;
-        context.getSystemService(NotificationManager.class).notify(HARD_PREVIEW_ID,
-                new Notification.Builder(context, soft ? SOFT_CHANNEL : FocusService.CHANNEL)
-                        .setSmallIcon(R.drawable.ic_notification)
-                        .setContentTitle("Focus Lock notification preview")
-                        .setContentText(soft ? "Soft Lock controls" : "Hard Lock controls")
-                        .setVisibility(Notification.VISIBILITY_PUBLIC)
-                        .setContentIntent(openApp(context, soft))
-                        .setAutoCancel(true)
-                        .setTimeoutAfter(10_000)
-                        .build());
     }
 
     static Notification.Builder timer(Context context, String channel, String title, long end, boolean soft, boolean onBreak) {
