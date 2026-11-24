@@ -23,10 +23,10 @@ final class LockNotifications {
     private LockNotifications() {}
 
     static void createChannel(NotificationManager manager, String id, String name) {
-        boolean hard = FocusService.CHANNEL.equals(id);
+        boolean sessionChannel = FocusService.CHANNEL.equals(id) || SOFT_CHANNEL.equals(id);
         NotificationChannel channel = new NotificationChannel(id, name,
-                hard ? NotificationManager.IMPORTANCE_HIGH : NotificationManager.IMPORTANCE_LOW);
-        if (hard) {
+                sessionChannel ? NotificationManager.IMPORTANCE_HIGH : NotificationManager.IMPORTANCE_LOW);
+        if (sessionChannel) {
             channel.setSound(null, null);
             channel.enableVibration(false);
             channel.setDescription("Pop-up, lock screen countdown, and Emergency break controls");
@@ -40,11 +40,6 @@ final class LockNotifications {
                 new Intent(context, MainActivity.class).setAction(soft ? OPEN_SOFT : OPEN_HARD)
                         .addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP | Intent.FLAG_ACTIVITY_SINGLE_TOP),
                 PendingIntent.FLAG_IMMUTABLE | PendingIntent.FLAG_UPDATE_CURRENT);
-    }
-
-    static Intent openSoftBreak(Context context) {
-        return new Intent(context, MainActivity.class).setAction(OPEN_SOFT_BREAK)
-                .addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP | Intent.FLAG_ACTIVITY_SINGLE_TOP);
     }
 
     static boolean available(Context context, boolean soft) {
@@ -67,15 +62,15 @@ final class LockNotifications {
         }
     }
 
-    static void previewHard(Context context) {
-        if (!available(context, false)) return;
+    static void preview(Context context, boolean soft) {
+        if (!available(context, soft)) return;
         context.getSystemService(NotificationManager.class).notify(HARD_PREVIEW_ID,
-                new Notification.Builder(context, FocusService.CHANNEL)
+                new Notification.Builder(context, soft ? SOFT_CHANNEL : FocusService.CHANNEL)
                         .setSmallIcon(R.drawable.ic_notification)
                         .setContentTitle("Focus Lock notification preview")
-                        .setContentText("Hard Lock controls use this notification channel.")
+                        .setContentText(soft ? "Soft Lock controls" : "Hard Lock controls")
                         .setVisibility(Notification.VISIBILITY_PUBLIC)
-                        .setContentIntent(openApp(context, false))
+                        .setContentIntent(openApp(context, soft))
                         .setAutoCancel(true)
                         .setTimeoutAfter(10_000)
                         .build());
@@ -121,7 +116,8 @@ final class LockNotifications {
                 session.test ? "Soft Lock test" : paused ? "Emergency break" : "Soft Lock",
                 System.currentTimeMillis() + countdown, true, paused).setTimeoutAfter(remaining);
         if (!session.test && !paused && EmergencyBreaks.current(context).available(SystemClock.elapsedRealtime())) {
-            PendingIntent emergency = PendingIntent.getActivity(context, 24, openSoftBreak(context),
+            PendingIntent emergency = PendingIntent.getBroadcast(context, 24,
+                    new Intent(context, AlarmReceiver.class).setAction(OPEN_SOFT_BREAK),
                     PendingIntent.FLAG_IMMUTABLE | PendingIntent.FLAG_UPDATE_CURRENT);
             notification.addAction(new Notification.Action.Builder(null, "Emergency break", emergency).build());
         }

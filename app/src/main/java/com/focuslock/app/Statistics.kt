@@ -40,13 +40,9 @@ private data class StatsReport(
 )
 
 private fun readStats(history: FocusHistory, allTime: Boolean): StatsReport {
-    if (allTime) {
-        val totals = history.allTime()
-        return StatsReport(totals.protectedMillis, totals.sessions, totals.breaks, totals.activeDays)
-    }
     val today = LocalDate.now()
-    val days = (6L downTo 0L).map { offset ->
-        val date = today.minusDays(offset)
+    val dates = if (allTime) history.recordedDates().sorted() else (6L downTo 0L).map(today::minusDays)
+    val days = dates.map { date ->
         DayStats(date, history.protectedMillis(date), history.sessions(date), history.breaks(date))
     }
     return StatsReport(days.sumOf { it.millis }, days.sumOf { it.sessions },
@@ -62,6 +58,7 @@ private fun focusTime(millis: Long): String {
 internal fun StatisticsDialog(activity: MainActivity, mode: FocusMode, close: () -> Unit) {
     val history = remember(activity, mode) { FocusHistory(activity, mode == FocusMode.Soft) }
     var allTime by rememberSaveable(mode) { mutableStateOf(false) }
+    var shown by rememberSaveable(mode, allTime) { mutableStateOf(14) }
     val report by key(history, allTime) {
         val initial = remember { readStats(history, allTime) }
         produceState(initial) {
@@ -91,11 +88,27 @@ internal fun StatisticsDialog(activity: MainActivity, mode: FocusMode, close: ()
                 if (!allTime) FocusChart(report.days)
             }
             GroupCard {
+                val first = report.days.firstOrNull()?.date ?: LocalDate.now()
+                val periodDays = if (allTime) (LocalDate.now().toEpochDay() - first.toEpochDay() + 1).coerceAtLeast(1) else 7L
+                StatRow("Daily average", focusTime(report.protectedMillis / periodDays))
+                InsetDivider()
                 StatRow("Sessions started", report.sessions.toString())
                 InsetDivider()
                 StatRow("Emergency breaks", report.breaks.toString())
                 InsetDivider()
                 StatRow("Days with focus", if (allTime) report.activeDays.toString() else "${report.activeDays} of 7")
+            }
+            Caption(if (allTime) "Daily average includes every day since the first recorded session." else "Daily average includes all seven days.")
+            if (report.days.isNotEmpty()) {
+                Text("Daily history", style = MaterialTheme.typography.titleMedium)
+                GroupCard {
+                    report.days.asReversed().take(shown).forEachIndexed { index, day ->
+                        if (index > 0) InsetDivider()
+                        StatRow(day.date.format(DateTimeFormatter.ofPattern("MMM d, yyyy", Locale.ENGLISH)),
+                            "${focusTime(day.millis)}\n${day.sessions} ${if (day.sessions == 1L) "session" else "sessions"} started")
+                    }
+                }
+                if (report.days.size > shown) androidx.compose.material3.TextButton(onClick = { shown += 14 }) { Text("Show earlier days") }
             }
             Caption("Protected time excludes tests and emergency breaks.")
         }

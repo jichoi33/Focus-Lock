@@ -55,7 +55,7 @@ Schedules show the time range and start days for each repeating lock. Tap an ina
 
 ### Emergency breaks
 
-Emergency breaks let you pause either lock temporarily while its countdown continues. Configure the duration and number of breaks in Focus Lock settings before starting. During a continuing lock, the break allowance refills every 24 hours from when the lock started. Unused breaks do not carry over. For Hard Lock, expand the lock screen notification. For Soft Lock, tap **Emergency break** in the app or its expanded countdown notification, then confirm **Take break**. Blocking resumes automatically at the end of the break.
+Emergency breaks let you pause either lock temporarily while its countdown continues. Configure the duration and number of breaks in Focus Lock settings before starting. During a continuing lock, the break allowance refills every 24 hours from when the lock started. Unused breaks do not carry over. For Hard Lock, expand the lock screen notification. For Soft Lock, tap **Emergency break** in the expanded notification to start immediately, or open the app and confirm **Take break**. Blocking resumes automatically at the end of the break.
 
 ### Soft Lock rules
 
@@ -63,12 +63,12 @@ You can tighten rules or add time mid-session. Website rules include subdomains 
 
 ### Completion and statistics
 
-Statistics show how much time Focus Lock protected. Open Focus Lock after a regular session to see the celebration, or tap the completion notification. For Hard Lock, enable **Settings → Celebration on unlock** to open it when you unlock within 12 hours of the session ending. On Android 10 and later, allow Focus Lock to display over other apps when prompted. If Android prevents the automatic launch, the notification and app still offer the celebration. Choose **Last 7 days** to see the date range or **All time** for lifetime totals. One-minute tests are excluded from statistics.
+Statistics show how much time Focus Lock protected. Open Focus Lock after a regular session to see the celebration, or tap the completion notification. For Hard Lock, enable **Settings → Celebration on unlock** to open it when you unlock within 12 hours of the session ending. On Android 10 and later, allow Focus Lock to display over other apps when prompted. If Android prevents the automatic launch, the notification and app still offer the celebration. Choose **Last 7 days** to see the date range or **All time** for lifetime totals. Both periods show daily protected time, sessions started, and average protected time per calendar day. One-minute tests are excluded from statistics.
 
 <details>
 <summary>How Android permissions affect a lock</summary>
 
-Hard Lock reapplies the system lock screen during calls. Android handles incoming and emergency calls on that screen. An active lock can also restrict access to Android Settings.
+Hard Lock reapplies the system lock screen during calls. Android handles incoming and emergency calls on that screen. Android Settings is available whenever the device is unlocked.
 
 Soft Lock reads the visible address bar in supported browsers to apply website rules. Strict mode can cover a browser if its address stays unreadable. Samsung Internet requires a verified address. Web views embedded in an allowed app follow that app’s rule. To open links in supported browser-provided tabs, turn on **Soft Lock rules → Allow in-app browser tabs** before starting. This is off by default. Opening the full browser still requires adding it to the allowlist.
 

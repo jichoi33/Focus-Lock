@@ -114,18 +114,21 @@ internal fun WorkspaceDialogs(activity: MainActivity, state: FocusSnapshot) {
                     InsetDivider()
                     SwitchRow("Return to Home", activity.returnHomeOnBlock, { activity.returnHomeOnBlock = it })
                 }
-                Caption("Home, Phone, and Focus Lock remain available. Android Settings is blocked during the session.")
             }
             PrimaryButton("Done", close)
         }
         "statistics" -> StatisticsDialog(activity, activity.mode, close)
-        "hard_notifications" -> FocusDialog("Hard Lock notifications", close) {
+        "lock_notifications" -> FocusDialog("Lock screen notifications", close) {
             Column(Modifier.heightIn(max = dialogBodyHeight()).verticalScroll(rememberScrollState()),
                 verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                Caption("Show notification details on the lock screen. Expand the Hard Lock notification to see its controls.")
+                Caption("Show notification details on the lock screen. Expand either lock notification to see its controls.")
                 GroupCard {
                     ActionRow("Hard Lock notification settings", "Enable notifications and pop-up display") {
                         activity.enableNotifications(false)
+                    }
+                    InsetDivider()
+                    ActionRow("Soft Lock notification settings", "Enable notifications and pop-up display") {
+                        activity.enableNotifications(true)
                     }
                     InsetDivider()
                     ActionRow("Android lock screen settings") { activity.openLockScreenSettings() }
@@ -138,8 +141,9 @@ internal fun WorkspaceDialogs(activity: MainActivity, state: FocusSnapshot) {
             }
             PrimaryButton("Preview pop-up", {
                 close()
-                if (LockNotifications.available(activity, false)) LockNotifications.previewHard(activity)
-                else activity.enableNotifications(false)
+                val soft = activity.mode == FocusMode.Soft
+                if (LockNotifications.available(activity, soft)) LockNotifications.preview(activity, soft)
+                else activity.enableNotifications(soft)
             })
         }
         "celebration" -> FocusDialog("Celebration on unlock", close) {
@@ -334,8 +338,8 @@ private fun SettingsDialog(activity: MainActivity, state: FocusSnapshot, close: 
                     activity.sheet = "celebration"
                 }
                 InsetDivider()
-                ActionRow("Lock screen notifications", "Hard Lock countdown and controls") {
-                    activity.sheet = "hard_notifications"
+                ActionRow("Lock screen notifications", "Countdowns and Emergency break controls") {
+                    activity.sheet = "lock_notifications"
                 }
                 InsetDivider()
                 ActionRow("Scheduled lock reminders", "5 minutes before Hard Lock",

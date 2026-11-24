@@ -378,7 +378,7 @@ class MainActivity : ComponentActivity() {
         val keyguard = getSystemService(KeyguardManager::class.java)
         val hardEndElapsed = if (windows.active.isEmpty()) 0L else clock.elapsed + (windows.activeEnd() - clock.wall)
         snapshot = FocusSnapshot(
-            rules, windows, hardEndElapsed, FocusService.settingsBlockedUntil > clock.elapsed, keyguard.isKeyguardLocked,
+            rules, windows, hardEndElapsed, FocusService.hardEnforcedUntil > clock.elapsed, keyguard.isKeyguardLocked,
             soft, softStore.sessionId(), keyguard.isDeviceSecure,
             FocusAdmin.enabled(this), AlarmReceiver.canSchedule(this),
             LockNotifications.hardVisible(this),
@@ -661,9 +661,9 @@ class MainActivity : ComponentActivity() {
             "\nEnable Soft Lock notifications to see the countdown outside Focus Lock."
         val session = if (test) "1-minute test. You can end it at any time." else "${durationLabel(minutes)} session."
         val breakInfo = if (test) "" else if (EmergencyBreaks.current(this).enabled)
-            "\nFor urgent use, open Focus Lock and tap Emergency break." else "\nEmergency breaks are off."
+            "\nTap Emergency break in the app or its expanded notification." else "\nEmergency breaks are off."
         prompt = Prompt(if (test) "Ready for your 1-minute test" else "Start Soft Lock?",
-            "$session\n$summary\nAndroid Settings will be blocked.$breakInfo$notice",
+            "$session\n$summary$breakInfo$notice",
             if (test) "Start test" else "Start", durationMinutes = minutes) {
             if (requireSoftConnection(test) && SoftBlocker.activeTest() == null &&
                 !softStore.read().active(SystemClock.elapsedRealtime())) {

@@ -193,7 +193,7 @@ private fun HardWorkspace(activity: MainActivity, state: FocusSnapshot) {
 
     if (!state.hardLockScreen && state.hard.active.isEmpty()) GroupCard {
         ActionRow("Check lock screen notifications", "Required to see Emergency break", icon = "Lock") {
-            activity.sheet = "hard_notifications"
+            activity.sheet = "lock_notifications"
         }
     }
 
@@ -328,13 +328,6 @@ private fun SoftWorkspace(activity: MainActivity, state: FocusSnapshot) {
     } else {
         val apps = if (activity.allowlist) activity.allowedApps else activity.blockedApps
         val count = apps.size
-        val appNames = remember(activity, apps) {
-            if (apps.isEmpty()) "" else {
-                val catalog = AppCatalog.launchable(activity).associateBy { it.id }
-                val labels = apps.map { catalog[it]?.label ?: it }.sortedBy { it.lowercase(Locale.ROOT) }
-                labels.take(2).joinToString(", ") + if (count > 2) " +${count - 2}" else ""
-            }
-        }
         val empty = !activity.allowlist && count == 0 && activity.blockedSites.isEmpty()
         val label = when {
             empty -> "Choose what to block"
@@ -359,15 +352,6 @@ private fun SoftWorkspace(activity: MainActivity, state: FocusSnapshot) {
                         else -> "${quantity(count, "app")} and ${quantity(sites, "site")} blocked"
                     }
                     Text(summary, style = MaterialTheme.typography.titleMedium)
-                    if (appNames.isNotEmpty()) {
-                        Text(appNames, style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 2,
-                            overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
-                    }
-                    if (activity.allowlist) {
-                        Caption(if (activity.allowBrowserTabs) "Supported in-app browser tabs allowed"
-                            else "In-app browser tabs follow app rules")
-                    }
                 }
                 Symbol("Chev", tint = MaterialTheme.colorScheme.outline)
             }

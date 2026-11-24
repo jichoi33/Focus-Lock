@@ -112,30 +112,14 @@ final class FocusHistory {
     long sessions(LocalDate date) { return prefs.getLong("sessions/" + date, 0); }
     long breaks(LocalDate date) { return prefs.getLong("breaks/" + date, 0); }
 
-    static final class Totals {
-        long protectedMillis;
-        long sessions;
-        long breaks;
-        int activeDays;
-    }
-
-    Totals allTime() {
-        Totals totals = new Totals();
-        for (Map.Entry<String, ?> entry : prefs.getAll().entrySet()) {
-            if (!(entry.getValue() instanceof Long)) continue;
-            long amount = (Long) entry.getValue();
-            if (amount <= 0) continue;
-            String key = entry.getKey();
-            if (key.startsWith("time/")) {
-                totals.protectedMillis += amount;
-                totals.activeDays++;
-            } else if (key.startsWith("sessions/")) {
-                totals.sessions += amount;
-            } else if (key.startsWith("breaks/")) {
-                totals.breaks += amount;
+    Set<LocalDate> recordedDates() {
+        Set<LocalDate> dates = new java.util.TreeSet<>();
+        for (String key : prefs.getAll().keySet()) {
+            if (key.startsWith("time/") || key.startsWith("sessions/") || key.startsWith("breaks/")) {
+                dates.add(LocalDate.parse(key.substring(key.indexOf('/') + 1)));
             }
         }
-        return totals;
+        return dates;
     }
 
     void stop() {

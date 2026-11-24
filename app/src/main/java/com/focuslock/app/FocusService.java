@@ -35,7 +35,7 @@ public final class FocusService extends Service {
     private static final long UNLOCK_FALLBACK_MS = 1000;
     static boolean running;
     // This service and the accessibility service run in the same process and on the main thread.
-    static long settingsBlockedUntil;
+    static long hardEnforcedUntil;
     static Runnable enforcementChanged;
 
     private final Handler handler = new Handler(Looper.getMainLooper());
@@ -319,8 +319,8 @@ public final class FocusService extends Service {
     }
 
     private static void setEnforcedUntil(long end) {
-        boolean changed = (settingsBlockedUntil == 0L) != (end == 0L);
-        settingsBlockedUntil = end;
+        boolean changed = (hardEnforcedUntil == 0L) != (end == 0L);
+        hardEnforcedUntil = end;
         if (changed && enforcementChanged != null) enforcementChanged.run();
     }
 }

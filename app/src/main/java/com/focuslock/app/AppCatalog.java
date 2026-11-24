@@ -38,6 +38,7 @@ final class AppCatalog {
         TelecomManager telecom = context.getSystemService(TelecomManager.class);
         if (telecom != null) excluded.add(telecom.getDefaultDialerPackage());
         excluded.addAll(homeApps(pm));
+        excluded.addAll(settingsApps(pm));
         Intent install = new Intent(Intent.ACTION_VIEW)
                 .setDataAndType(Uri.parse("content://com.focuslock.app/update.apk"),
                         "application/vnd.android.package-archive");
@@ -73,7 +74,6 @@ final class AppCatalog {
     static List<Entry> launchable(Context context) {
         PackageManager pm = context.getPackageManager();
         Set<String> excluded = essentials(context);
-        excluded.addAll(settingsApps(pm));
         Map<String, Entry> entries = new LinkedHashMap<>();
         Intent launcher = new Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_LAUNCHER);
         for (ResolveInfo result : pm.queryIntentActivities(launcher, 0)) {

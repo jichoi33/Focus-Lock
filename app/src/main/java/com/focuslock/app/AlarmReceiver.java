@@ -71,6 +71,11 @@ public final class AlarmReceiver extends BroadcastReceiver {
     }
 
     @Override public void onReceive(Context context, Intent intent) {
+        if (LockNotifications.OPEN_SOFT_BREAK.equals(intent.getAction())) {
+            SoftStore.Session session = new SoftStore(context).read();
+            if (session.test || !session.active(android.os.SystemClock.elapsedRealtime())
+                    || !EmergencyBreaks.begin(context)) return;
+        }
         FocusStore store = new FocusStore(context);
         if (Intent.ACTION_TIME_CHANGED.equals(intent.getAction())) {
             EmergencyBreaks.rebase(context);

@@ -79,7 +79,6 @@ public final class SoftBlocker extends AccessibilityService {
     private SoftStore.Session test;
     private Set<String> detectedBrowsers;
     private Set<String> essentials;
-    private Set<String> settingsApps;
     private KeyguardManager keyguard;
     private WindowManager windows;
     private BlockCover cover;
@@ -175,7 +174,6 @@ public final class SoftBlocker extends AccessibilityService {
         awaitingSoftExpiry = !session.test && session.active(SystemClock.elapsedRealtime());
         sessionKey = store.sessionId();
         essentials = AppCatalog.essentials(this);
-        settingsApps = AppCatalog.settingsApps(getPackageManager());
         boolean inspectBrowsers = session.allowlist ? session.allowBrowserTabs : !session.sites.isEmpty();
         detectedBrowsers = inspectBrowsers ? AppCatalog.browsers(this) : java.util.Collections.emptySet();
         customTabWindow = -1;
@@ -193,7 +191,7 @@ public final class SoftBlocker extends AccessibilityService {
     @Override public void onAccessibilityEvent(AccessibilityEvent event) {
         if (session == null) return;
         long now = SystemClock.elapsedRealtime();
-        if (!session.active(now) && now >= FocusService.settingsBlockedUntil) {
+        if (!session.active(now)) {
             hideCover();
             return;
         }
@@ -236,7 +234,6 @@ public final class SoftBlocker extends AccessibilityService {
                 SessionUninstallPolicy.reconcile(this, new FocusStore(this).state(clock), session, clock);
             }
         }
-        boolean hardActive = now < FocusService.settingsBlockedUntil;
         if ((breakUntil > 0 && breakUntil <= now) || (softActive && now >= breakReset)) {
             EmergencyBreaks breaks = EmergencyBreaks.current(this);
             breakUntil = breaks.until;
@@ -249,22 +246,21 @@ public final class SoftBlocker extends AccessibilityService {
         boolean realSession = softActive && !session.test;
         history.sample(now, realSession && !paused ? session.timer.elapsedEnd : 0,
                 realSession ? java.util.Collections.singletonMap(sessionKey, session.timer.elapsedEnd) : java.util.Collections.emptyMap());
-        if (!softActive && !hardActive) {
+        if (!softActive) {
             hideCover();
             return;
         }
 
         long delay = IDLE_CHECK_MS;
-        if (keyguard.isKeyguardLocked()) hideCover();
+        if (paused || keyguard.isKeyguardLocked()) hideCover();
         else if (navigationUntil > now) delay = navigationUntil - now;
-        else delay = checkForeground(now, softActive && !paused, hardActive || (paused && softActive));
+        else delay = checkForeground(now);
         if (paused) delay = Math.min(delay, breakUntil - now);
         if (softActive) delay = Math.min(delay, Math.min(session.timer.elapsedEnd, breakReset) - now);
-        if (hardActive) delay = Math.min(delay, FocusService.settingsBlockedUntil - now);
         handler.postDelayed(update, Math.max(1, delay));
     }
 
-    private long checkForeground(long now, boolean softActive, boolean hardActive) {
+    private long checkForeground(long now) {
         AccessibilityNodeInfo root = foregroundRoot();
         if (root == null) {
             navigation.reset();
@@ -281,14 +277,11 @@ public final class SoftBlocker extends AccessibilityService {
             String title = null;
             String reason = "";
             boolean site = false;
-            boolean settingsBlocked = settingsApps.contains(id);
-            if (settingsBlocked) {
-                title = "Android Settings is blocked";
-            } else if (softActive && BlockRules.appBlocked(id, session.allowlist, session.apps, essentials)
+            if (BlockRules.appBlocked(id, session.allowlist, session.apps, essentials)
                     && !(session.allowlist && session.allowBrowserTabs && browser(id) && customTab(root, id))) {
                 title = appBlockTitle(id);
                 if (session.allowlist) reason = "This app is outside your Allowlist.";
-            } else if (softActive && !session.allowlist && !session.sites.isEmpty() && browser(id)) {
+            } else if (!session.allowlist && !session.sites.isEmpty() && browser(id)) {
                 site = true;
                 Address address = browserAddress(root, id);
                 boolean alreadyCovered = cover != null && windowId == coveredWindowId
@@ -318,22 +311,18 @@ public final class SoftBlocker extends AccessibilityService {
             }
             if (title != null) {
                 // Keep a test cover available long enough to use its End test action.
-                boolean autoReturn = !site && ((settingsBlocked && hardActive)
-                        || (softActive && !session.test && session.returnHome));
+                boolean autoReturn = !site && !session.test && session.returnHome;
                 if (!autoReturn) appReturn.reset();
                 long remaining = autoReturn ? appReturn.remaining(id, now) : Long.MAX_VALUE;
-                long end = settingsBlocked
-                        ? Math.max(session.timer.elapsedEnd, FocusService.settingsBlockedUntil)
-                        : session.timer.elapsedEnd;
-                showCover(windowId, title, reason, site, end, now);
-                if (cover != null && !site && !settingsBlocked) {
+                showCover(windowId, title, reason, site, session.timer.elapsedEnd, now);
+                if (cover != null && !site) {
                     cover.appPackage = id;
                     cover.appTitle = title;
                 }
                 if (cover != null && remaining != Long.MAX_VALUE) {
                     if (remaining > 0) return Math.min(remaining, IDLE_CHECK_MS);
                     long current = SystemClock.elapsedRealtime();
-                    if ((!session.active(current) && !(settingsBlocked && current < FocusService.settingsBlockedUntil))
+                    if (!session.active(current)
                             || keyguard.isKeyguardLocked()) return 1L;
                     if (returnHome()) {
                         navigationUntil = current + NAVIGATION_SETTLE_MS;
