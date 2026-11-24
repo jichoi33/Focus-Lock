@@ -150,10 +150,8 @@ private fun HardWorkspace(activity: MainActivity, state: FocusSnapshot) {
     val onlyTest = test && state.hard.active.all { it.rule.test }
     val quick = state.hard.active.firstOrNull { it.rule.quick() && !it.rule.test }
     if (state.hardEndElapsed > 0) {
-        val paused = !onlyTest && state.breaks.until > SystemClock.elapsedRealtime()
         val title = when {
             onlyTest -> "Hard Lock test"
-            paused -> "Break time remaining"
             state.hardEnforced -> "Hard Lock active"
             else -> "Hard Lock pending"
         }
@@ -162,14 +160,11 @@ private fun HardWorkspace(activity: MainActivity, state: FocusSnapshot) {
             else state.hardEndElapsed + (release.end - state.hard.activeEnd())
         val unlock = if (release.end == 0L) "No scheduled unlock in the preview window"
             else ClockLabels.deadline(release.end, now, activity.use24Hour, "Unlocks")
-        val detail = if (paused) breakDetail(countdownEnd, state.breaks.until) else unlock
-        RunningCard(title, if (paused) minOf(countdownEnd, state.breaks.until) else countdownEnd, detail,
-            showCountdown = paused || onlyTest || release.end != 0L) {
+        RunningCard(title, countdownEnd, unlock, showCountdown = onlyTest || release.end != 0L) {
             if (onlyTest) TextButton(onClick = { activity.hardAction(FocusService.END_TEST) }) { Text("End test") }
             if (!state.hardEnforced && state.admin && state.secure) TextButton(onClick = activity::refreshHard) { Text("Activate") }
-            if (quick != null) TextButton(onClick = { activity.hardAction(FocusService.EXTEND) }) { Text(if (paused) "Add 10 min to lock" else "Add 10 min") }
+            if (quick != null) TextButton(onClick = { activity.hardAction(FocusService.EXTEND) }) { Text("Add 10 min") }
         }
-        if (!onlyTest) BreakRow(activity, state)
     } else {
         val minutes = activity.quickDuration.total ?: 30
         val end = now + minutes * Rule.MINUTE

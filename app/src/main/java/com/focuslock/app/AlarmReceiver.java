@@ -46,9 +46,8 @@ public final class AlarmReceiver extends BroadcastReceiver {
             return;
         }
         scheduleOne(context, WALL_CODE, AlarmManager.RTC_WAKEUP, state.nextWall);
-        long until = state.active.isEmpty() ? 0 : EmergencyBreaks.current(context).until;
         scheduleOne(context, ELAPSED_CODE, AlarmManager.ELAPSED_REALTIME_WAKEUP,
-                until > 0 ? Math.min(until, state.nextElapsed) : state.nextElapsed);
+                state.nextElapsed);
         ScheduleReminders.schedule(context, state);
     }
 

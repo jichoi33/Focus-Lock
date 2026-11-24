@@ -218,9 +218,6 @@ internal fun WorkspaceDialogs(activity: MainActivity, state: FocusSnapshot) {
                     style = MaterialTheme.typography.titleLarge, color = MaterialTheme.colorScheme.primary)
                 Caption("${durationLabel(review.minutes)} timer")
                 review.extension?.let { Caption(it) }
-                HorizontalDivider()
-                Text(review.breakInfo, style = MaterialTheme.typography.titleMedium)
-                review.notificationInfo?.let { Caption(it) }
             }
         }
     }
@@ -284,7 +281,7 @@ private fun SettingsDialog(activity: MainActivity, state: FocusSnapshot, close: 
         Column(Modifier.fillMaxWidth().heightIn(max = height).verticalScroll(rememberScrollState()),
             verticalArrangement = Arrangement.spacedBy(12.dp)) {
             val b = state.breaks
-            Text("Session preferences", style = MaterialTheme.typography.titleMedium)
+            Text("Soft Lock preferences", style = MaterialTheme.typography.titleMedium)
             GroupCard { ActionRow("Emergency breaks", if (b.enabled) "${b.minutes} min each, ${b.limit} per 24 hours" else "Off", icon = "Clock") {
                 activity.sheet = "breaks"
             } }
@@ -350,7 +347,6 @@ private fun BreaksDialog(activity: MainActivity, state: FocusSnapshot, close: ()
             if (enabled) {
                 Caption("Breaks refill every 24 hours from the start of a continuing lock.")
                 Caption("During Soft Lock, tap Emergency break in Focus Lock or its expanded notification.")
-                Caption("During Hard Lock, expand its lock screen notification to find Emergency break.")
             }
         }
         if (locked) PrimaryButton("Done", close)

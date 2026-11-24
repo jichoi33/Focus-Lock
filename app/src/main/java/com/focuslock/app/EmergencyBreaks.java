@@ -6,7 +6,7 @@ import java.util.Collections;
 import java.util.HashSet;
 import java.util.Set;
 
-/** A quota renews every 24 hours and is shared by overlapping locks. All callers run on the main thread. */
+/** A Soft Lock quota renews every 24 hours. All callers run on the main thread. */
 final class EmergencyBreaks {
     private static final long DAY_MS = Rule.DAY * Rule.MINUTE;
 
@@ -36,20 +36,14 @@ final class EmergencyBreaks {
 
     static EmergencyBreaks current(Context c) {
         SessionClock clock = new SessionClock(c);
-        return read(c, clock, new FocusStore(c).state(clock), new SoftStore(c).read());
+        return read(c, clock, new SoftStore(c).read());
     }
 
-    static EmergencyBreaks read(Context c, SessionClock clock, Rule.State hard, SoftStore.Session soft) {
+    static EmergencyBreaks read(Context c, SessionClock clock, SoftStore.Session soft) {
         SharedPreferences p = prefs(c);
         Set<String> active = new HashSet<>();
         long end = 0;
         long start = clock.wall;
-        for (Rule.Window window : hard.active) {
-            if (window.rule.test) continue;
-            active.add(window.key());
-            start = Math.min(start, window.rule.quick() ? window.rule.from : window.start);
-            end = Math.max(end, clock.elapsed + window.end - clock.wall);
-        }
         if (!soft.test && soft.active(clock.elapsed)) {
             active.add(new SoftStore(c).sessionId());
             start = Math.min(start, soft.timer.wallEnd - soft.timer.budget);
@@ -150,10 +144,7 @@ final class EmergencyBreaks {
         SharedPreferences.Editor edit = prefs(c).edit().putInt("used", b.used + 1);
         storeTimer(edit, clock.start(duration));
         edit.apply();
-        if (new FocusStore(c).state(clock).active.stream().anyMatch(window -> !window.rule.test)) {
-            new FocusHistory(c, false).breakUsed();
-        }
-        if (new SoftStore(c).read().active(clock.elapsed)) new FocusHistory(c, true).breakUsed();
+        new FocusHistory(c, true).breakUsed();
         SoftBlocker.refreshBreak();
         return true;
     }

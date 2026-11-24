@@ -24,7 +24,6 @@ import android.util.Log;
 
 public final class FocusService extends Service {
     static final String CHANNEL = "focus_session";
-    static final String BREAK = "com.focuslock.app.BREAK";
     static final String END_TEST = "com.focuslock.app.END_HARD_TEST";
     static final String EXTEND = "com.focuslock.app.EXTEND";
     static final long MAX_QUICK = Rule.MAX_LOCK_MINUTES * Rule.MINUTE;
@@ -106,7 +105,6 @@ public final class FocusService extends Service {
                 }
             }
         }
-        if (BREAK.equals(action) && hasRegularLock(store.state(new SessionClock(this)))) EmergencyBreaks.begin(this);
         if (EXTEND.equals(action)) extendQuick();
         updateSession(false);
         return START_STICKY;
@@ -140,9 +138,6 @@ public final class FocusService extends Service {
         handler.removeCallbacks(unlockCheck);
         SessionClock clock = new SessionClock(this);
         Rule.State state = store.state(clock);
-        EmergencyBreaks breaks = EmergencyBreaks.read(this, clock, state, new SoftStore(this).read());
-        state.nextElapsed = Math.min(state.nextElapsed, breaks.nextReset);
-        if (breaks.until > clock.elapsed) state.nextElapsed = Math.min(state.nextElapsed, breaks.until);
         if (state.nextWall != scheduledWall || state.nextElapsed != scheduledElapsed) {
             AlarmReceiver.schedule(this, state);
             scheduledWall = state.nextWall;
@@ -156,7 +151,7 @@ public final class FocusService extends Service {
             setEnforcedUntil(0L);
             history.stop();
             if (state.active.isEmpty() && handleCompletion(clock, justUnlocked)) return;
-            if (foregroundId == 0) publish(NOTIFICATION_ID, notification("Starting Hard Lock", 0, false, false, false, false));
+            if (foregroundId == 0) publish(NOTIFICATION_ID, notification("Starting Hard Lock", 0, false, false));
             stopSelf();
             return;
         }
@@ -166,13 +161,10 @@ public final class FocusService extends Service {
         long end = state.activeEnd();
         boolean testing = !hasRegularLock(state);
         boolean hasQuick = state.active.stream().anyMatch(window -> window.rule.quick() && !window.rule.test);
-        boolean paused = !testing && breaks.until > clock.elapsed;
         long release = testing ? end : state.releaseAfter(end, clock.wall, java.time.ZoneId.systemDefault()).end;
-        long breakEnd = clock.wall + breaks.until - clock.elapsed;
-        long noticeEnd = paused ? (release > 0 ? Math.min(release, breakEnd) : breakEnd) : release;
-        updateNotice(noticeEnd, hasQuick, breaks, paused, testing);
+        updateNotice(release, hasQuick, testing);
         if (wasWaiting && completion.pending() != 0) LockNotifications.showCompletion(this, completion.pending());
-        if (!paused && !enforce()) {
+        if (!enforce()) {
             completion.cancelHard();
             return;
         }
@@ -186,12 +178,8 @@ public final class FocusService extends Service {
             sessions.put(window.key(), sessionEnd);
             regularEnd = Math.max(regularEnd, sessionEnd);
         }
-        history.sample(clock.elapsed, paused ? 0 : regularEnd, sessions);
+        history.sample(clock.elapsed, regularEnd, sessions);
         setEnforcedUntil(protectionEnd);
-        if (paused) {
-            handler.postDelayed(tick, Math.max(1, Math.min(state.nextElapsed - clock.elapsed, state.next - clock.wall)));
-            return;
-        }
         scheduleUnlockCheck();
         handler.postDelayed(tick, Math.max(1, Math.min(10_000, Math.min(state.next - clock.wall, state.nextElapsed - clock.elapsed))));
     }
@@ -256,15 +244,14 @@ public final class FocusService extends Service {
         }
     }
 
-    private void updateNotice(long end, boolean hasQuick, EmergencyBreaks breaks, boolean paused, boolean testing) {
-        boolean canStop = !testing && breaks.enabled && breaks.remaining() > 0 && !paused;
-        String label = end > 0 && !paused ? ClockLabels.deadline(end, System.currentTimeMillis(),
+    private void updateNotice(long end, boolean hasQuick, boolean testing) {
+        String label = end > 0 ? ClockLabels.deadline(end, System.currentTimeMillis(),
                 ClockLabels.is24Hour(this), "Unlocks") : "";
-        String key = end / 1000 + "/" + hasQuick + "/" + canStop + "/" + paused + "/" + testing + "/" + label;
+        String key = end / 1000 + "/" + hasQuick + "/" + testing + "/" + label;
         if (key.equals(noticeKey)) return;
         noticeKey = key;
         notifications.cancel(AlarmReceiver.SCHEDULE_NOTICE_ID);
-        publish(NOTIFICATION_ID, notification(testing ? "Hard Lock test" : paused ? "Emergency break" : "Hard Lock", end, hasQuick, canStop, testing, paused));
+        publish(NOTIFICATION_ID, notification(testing ? "Hard Lock test" : "Hard Lock", end, hasQuick, testing));
     }
 
     private void publish(int id, Notification notification) {
@@ -280,14 +267,13 @@ public final class FocusService extends Service {
         foregroundId = id;
     }
 
-    private Notification notification(String title, long end, boolean extend, boolean canStop, boolean testing, boolean paused) {
-        Notification.Builder builder = LockNotifications.timer(this, CHANNEL, title, end, false, paused);
+    private Notification notification(String title, long end, boolean extend, boolean testing) {
+        Notification.Builder builder = LockNotifications.timer(this, CHANNEL, title, end, false, false);
         if (end == 0 && "Hard Lock".equals(title)) builder.setContentText("No scheduled unlock in the preview window");
         if (Build.VERSION.SDK_INT >= 31) {
             builder.setForegroundServiceBehavior(Notification.FOREGROUND_SERVICE_IMMEDIATE);
         }
         if (testing) builder.addAction(action("End test", END_TEST, 24));
-        if (canStop) builder.addAction(action("Emergency break", BREAK, 21));
         if (extend) builder.addAction(action("Add 10 min", EXTEND, 22));
         return builder.build();
     }

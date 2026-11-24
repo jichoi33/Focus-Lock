@@ -28,7 +28,7 @@ final class LockNotifications {
         if (sessionChannel) {
             channel.setSound(null, null);
             channel.enableVibration(false);
-            channel.setDescription("Pop-up, lock screen countdown, and Emergency break controls");
+            channel.setDescription(SOFT_CHANNEL.equals(id) ? "Countdown and Emergency break controls" : "Hard Lock countdown and controls");
         }
         channel.setLockscreenVisibility(Notification.VISIBILITY_PUBLIC);
         manager.createNotificationChannel(channel);

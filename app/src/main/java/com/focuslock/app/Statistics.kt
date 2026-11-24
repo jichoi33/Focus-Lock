@@ -94,8 +94,10 @@ internal fun StatisticsDialog(activity: MainActivity, mode: FocusMode, close: ()
                 InsetDivider()
                 StatRow("Sessions started", report.sessions.toString())
                 InsetDivider()
-                StatRow("Emergency breaks", report.breaks.toString())
-                InsetDivider()
+                if (mode == FocusMode.Soft) {
+                    StatRow("Emergency breaks", report.breaks.toString())
+                    InsetDivider()
+                }
                 StatRow("Days with focus", if (allTime) report.activeDays.toString() else "${report.activeDays} of 7")
             }
             Caption(if (allTime) "Daily average includes every day since the first recorded session." else "Daily average includes all seven days.")
@@ -110,7 +112,7 @@ internal fun StatisticsDialog(activity: MainActivity, mode: FocusMode, close: ()
                 }
                 if (report.days.size > shown) androidx.compose.material3.TextButton(onClick = { shown += 14 }) { Text("Show earlier days") }
             }
-            Caption("Protected time excludes tests and emergency breaks.")
+            Caption(if (mode == FocusMode.Soft) "Protected time excludes tests and emergency breaks." else "Protected time excludes tests.")
         }
     }
 }

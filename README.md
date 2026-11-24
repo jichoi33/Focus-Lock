@@ -31,11 +31,11 @@
 
 Tap **Edit** next to the timer, then scroll **Hours** and **Minutes** to set a duration. Scroll past **24 hr** to choose **2–7 days** in one-day steps. Each day is 24 hours. You can also tap **15 min**, **30 min**, or **1 hr**.
 
-To update, open the latest signed APK over your existing release. Android uses the app ID and signing certificate to decide whether it can install the update in place. Enable lock screen notifications if you want to see the Hard Lock countdown and emergency controls.
+To update, open the latest signed APK over your existing release. Android uses the app ID and signing certificate to decide whether it can install the update in place. Enable lock screen notifications if you want to see the Hard Lock countdown.
 
 ### Updating during a lock
 
-Install the newer signed APK over the existing app to keep an active session and its original deadline. Android replaces the running process during installation. Hard Lock requests enforcement again after replacement, and Soft Lock resumes its saved rules when Android reconnects its accessibility service. If Android delays recovery, open Focus Lock from its notification. A Hard Lock can prevent interacting with the installer until an emergency break or the end of the session.
+Install the newer signed APK over the existing app to keep an active session and its original deadline. Android replaces the running process during installation. Hard Lock requests enforcement again after replacement, and Soft Lock resumes its saved rules when Android reconnects its accessibility service. If Android delays recovery, open Focus Lock from its notification. A Hard Lock can prevent interacting with the installer until the end of the session.
 
 On a managed device or work profile, Focus Lock can block its own uninstall during a session through Android’s device-owner, profile-owner or delegated **block-uninstall** policy. This policy permits in-place updates. Focus Lock clears the restriction it applied when the sessions end and Android processes the end event. A personal installation with ordinary device-admin or accessibility access cannot guarantee uninstall prevention. A device administrator can also enforce uninstall protection independently through its management console.
 
@@ -55,7 +55,7 @@ Schedules show the time range and start days for each repeating lock. Tap an ina
 
 ### Emergency breaks
 
-Emergency breaks let you pause either lock temporarily while its countdown continues. Configure the duration and number of breaks in Focus Lock settings before starting. During a continuing lock, the break allowance refills every 24 hours from when the lock started. Unused breaks do not carry over. For Hard Lock, expand the lock screen notification. For Soft Lock, tap **Emergency break** in the expanded notification to start immediately, or open the app and confirm **Take break**. Blocking resumes automatically at the end of the break.
+Emergency breaks let you pause Soft Lock temporarily while its countdown continues. Configure the duration and number of breaks in Focus Lock settings before starting. During a continuing lock, the break allowance refills every 24 hours from when the lock started. Unused breaks do not carry over. Tap **Emergency break** in the expanded notification to start immediately, or open the app and confirm **Take break**. Blocking resumes automatically at the end of the break.
 
 ### Soft Lock rules
 

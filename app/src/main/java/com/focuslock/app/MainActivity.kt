@@ -76,8 +76,6 @@ internal data class HardStartReview(
     val minutes: Int,
     val unlock: String?,
     val extension: String?,
-    val breakInfo: String,
-    val notificationInfo: String?,
     val updated: Boolean,
     val confirm: () -> Unit
 ) {
@@ -399,7 +397,7 @@ class MainActivity : ComponentActivity() {
             soft, softStore.sessionId(), keyguard.isDeviceSecure,
             FocusAdmin.enabled(this), AlarmReceiver.canSchedule(this),
             setup, hardVisible && screenVisible, softNotices,
-            SoftBlocker.enabled(this), SoftBlocker.isConnected(), EmergencyBreaks.read(this, clock, windows, savedSoft)
+            SoftBlocker.enabled(this), SoftBlocker.isConnected(), EmergencyBreaks.read(this, clock, savedSoft)
         )
         handler.removeCallbacks(updateBoundary)
         val hardDelay = if (windows.next == Long.MAX_VALUE) Long.MAX_VALUE else windows.next - clock.wall
@@ -614,17 +612,7 @@ class MainActivity : ComponentActivity() {
             val name = it.rule.name.orEmpty().ifBlank { "A scheduled lock" }
             "$name extends this lock."
         }
-        val breaks = current.breaks
-        val breakInfo = if (breaks.enabled) {
-            val uses = if (breaks.remaining() == 1) "1 break" else "${breaks.remaining()} breaks"
-            "$uses available, up to ${breaks.minutes} min each"
-        } else "Emergency breaks are off"
-        val notificationInfo = when {
-            breaks.enabled && !current.hardLockScreen -> "Lock screen notifications are off. Turn them on to access break controls."
-            breaks.enabled -> "Expand the Hard Lock notification on the lock screen to take a break."
-            else -> null
-        }
-        hardStartReview = HardStartReview(minutes, unlock, extension, breakInfo, notificationInfo, updated) {
+        hardStartReview = HardStartReview(minutes, unlock, extension, updated) {
             beginHard(minutes, test = false, reviewed = release)
         }
     }
