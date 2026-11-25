@@ -2,6 +2,7 @@ package com.focuslock.app;
 
 import android.content.Context;
 import android.content.Intent;
+import android.content.pm.ApplicationInfo;
 import android.content.pm.PackageManager;
 import android.content.pm.ResolveInfo;
 import android.net.Uri;
@@ -68,10 +69,22 @@ final class AppCatalog {
                 PackageManager.MATCH_DEFAULT_ONLY | PackageManager.MATCH_SYSTEM_ONLY)) {
             packages.add(settings.activityInfo.packageName);
         }
+        // AOSP Settings binds its suggestions service by component, without an intent filter.
+        String intelligence = "com.android.settings.intelligence";
+        try {
+            ApplicationInfo app = pm.getApplicationInfo(intelligence, 0);
+            if ((app.flags & ApplicationInfo.FLAG_SYSTEM) != 0) packages.add(intelligence);
+        } catch (PackageManager.NameNotFoundException ignored) {
+            // Manufacturers may supply their own provider.
+        }
+        Intent suggestions = new Intent("android.service.settings.suggestions.SuggestionService");
+        for (ResolveInfo service : pm.queryIntentServices(suggestions, PackageManager.MATCH_SYSTEM_ONLY)) {
+            packages.add(service.serviceInfo.packageName);
+        }
         return packages;
     }
 
-    static List<Entry> launchable(Context context) {
+    static List<Entry> selectable(Context context, boolean includeNonLauncher) {
         PackageManager pm = context.getPackageManager();
         Set<String> excluded = essentials(context);
         Map<String, Entry> entries = new LinkedHashMap<>();
@@ -80,9 +93,23 @@ final class AppCatalog {
             String id = result.activityInfo.packageName;
             if (!excluded.contains(id)) entries.putIfAbsent(id, new Entry(id, result.loadLabel(pm).toString()));
         }
+        Set<String> launcherIds = new HashSet<>(entries.keySet());
+        if (includeNonLauncher) {
+            for (ApplicationInfo app : pm.getInstalledApplications(0)) {
+                String id = app.packageName;
+                if (app.enabled && !excluded.contains(id) && !entries.containsKey(id)) {
+                    entries.put(id, new Entry(id, app.loadLabel(pm).toString()));
+                }
+            }
+        }
         List<Entry> list = new ArrayList<>(entries.values());
         Collator order = Collator.getInstance();
-        list.sort((left, right) -> order.compare(left.label, right.label));
+        list.sort((left, right) -> {
+            int group = Boolean.compare(launcherIds.contains(right.id), launcherIds.contains(left.id));
+            if (group != 0) return group;
+            int label = order.compare(left.label, right.label);
+            return label != 0 ? label : left.id.compareTo(right.id);
+        });
         return list;
     }
 
