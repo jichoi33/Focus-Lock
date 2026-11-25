@@ -175,7 +175,7 @@ public final class SoftBlocker extends AccessibilityService {
         sessionKey = store.sessionId();
         essentials = AppCatalog.essentials(this);
         boolean inspectBrowsers = session.allowlist ? session.allowBrowserTabs : !session.sites.isEmpty();
-        detectedBrowsers = inspectBrowsers ? AppCatalog.browsers(this) : java.util.Collections.emptySet();
+        detectedBrowsers = inspectBrowsers ? AppCatalog.browsers(this, session.allowlist) : java.util.Collections.emptySet();
         customTabWindow = -1;
         navigation.reset();
         EmergencyBreaks breaks = EmergencyBreaks.current(this);
@@ -274,6 +274,7 @@ public final class SoftBlocker extends AccessibilityService {
             }
             String id = packageName.toString();
             int windowId = root.getWindowId();
+            if (windowId != customTabWindow || !id.equals(customTabPackage)) customTabWindow = -1;
             String title = null;
             String reason = "";
             boolean site = false;
@@ -407,10 +408,15 @@ public final class SoftBlocker extends AccessibilityService {
 
     private boolean customTab(AccessibilityNodeInfo root, String id) {
         // Match browser-owned custom tab controls, never a generic address bar or page content.
-        return (customTabWindow >= 0 && root.getWindowId() == customTabWindow && id.equals(customTabPackage))
-                || hasVisibleView(root, id, "custom_tabs_toolbar")
+        if (customTabWindow >= 0 && root.getWindowId() == customTabWindow && id.equals(customTabPackage)) return true;
+        boolean recognized = hasVisibleView(root, id, "custom_tabs_toolbar")
                 || hasVisibleView(root, id, "custom_tabs_close_button")
                 || hasVisibleView(root, id, "mozac_feature_customtabs_close");
+        if (recognized) {
+            customTabWindow = root.getWindowId();
+            customTabPackage = id;
+        }
+        return recognized;
     }
 
     private Address browserAddress(AccessibilityNodeInfo root, String id) {

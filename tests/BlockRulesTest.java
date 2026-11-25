@@ -40,6 +40,9 @@ public final class BlockRulesTest {
                 "Chromium custom tab receives the opt-in exception");
         check(BlockRules.customTabActivity("org.mozilla.fenix.customtabs.ExternalAppBrowserActivity"),
                 "Firefox external app tab is recognized");
+        check(BlockRules.customTabActivity("org.chromium.chrome.browser.customtabs.TranslucentCustomTabActivity"),
+                "translucent custom tab");
+        check(BlockRules.customTabActivity("browser.customtabs.CustomTabsActivity"), "plural custom tabs activity");
         check(!BlockRules.customTabActivity("org.chromium.chrome.browser.ChromeTabbedActivity"),
                 "opening the standalone browser ends the exception");
         Set<String> changes = Set.of("com.example.browser", "com.example.home");

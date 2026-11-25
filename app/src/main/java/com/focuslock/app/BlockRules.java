@@ -19,7 +19,8 @@ final class BlockRules {
     }
 
     static boolean customTabActivity(String name) {
-        return name.endsWith(".CustomTabActivity") || name.endsWith(".ExternalAppBrowserActivity");
+        return name.endsWith(".CustomTabActivity") || name.endsWith(".CustomTabsActivity")
+                || name.endsWith(".TranslucentCustomTabActivity") || name.endsWith(".ExternalAppBrowserActivity");
     }
 
     static Set<String> tightenedApps(boolean allowlist, Set<String> current, Set<String> apps) {

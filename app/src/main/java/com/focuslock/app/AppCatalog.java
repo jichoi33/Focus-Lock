@@ -113,12 +113,18 @@ final class AppCatalog {
         return list;
     }
 
-    static Set<String> browsers(Context context) {
+    static Set<String> browsers(Context context, boolean includeTabProviders) {
         Set<String> result = new HashSet<>();
         Intent intent = new Intent(Intent.ACTION_VIEW, Uri.parse("https://example.invalid"))
                 .addCategory(Intent.CATEGORY_BROWSABLE);
         for (ResolveInfo handler : context.getPackageManager().queryIntentActivities(intent, 0)) {
             result.add(handler.activityInfo.packageName);
+        }
+        if (includeTabProviders) {
+            Intent tabs = new Intent("android.support.customtabs.action.CustomTabsService");
+            for (ResolveInfo provider : context.getPackageManager().queryIntentServices(tabs, 0)) {
+                result.add(provider.serviceInfo.packageName);
+            }
         }
         return result;
     }
