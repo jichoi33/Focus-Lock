@@ -27,8 +27,6 @@ import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.input.TextFieldValue
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.withContext
 import kotlinx.coroutines.delay
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -147,7 +145,7 @@ internal fun WorkspaceDialogs(activity: MainActivity, state: FocusSnapshot) {
         }
         "apps" -> {
             val allow = activity.allowlist
-            val entries = pickerApps(activity, allow) ?: return
+            val entries = remember(activity) { AppCatalog.launchable(activity) }
             val selected = if (allow) activity.allowedApps else activity.blockedApps
             AppPickerDialog(activity, if (allow) "Allowed apps" else "Blocked apps", entries, selected, allowBulkSelection = allow,
                 close = { activity.sheet = "rules" }) {
@@ -381,8 +379,8 @@ private fun TightenRulesDialog(activity: MainActivity, state: FocusSnapshot, clo
             PrimaryButton("Done", close)
         }
         "tighten-apps" -> {
-            val installed = pickerApps(activity, session.allowlist) ?: return
-            val entries = remember(installed, session.apps, session.allowlist) {
+            val entries = remember(activity, session.apps, session.allowlist) {
+                val installed = AppCatalog.launchable(activity)
                 if (session.allowlist) {
                     val byId = installed.associateBy { it.id }
                     session.apps.map { byId[it] ?: AppCatalog.Entry(it, it) }.sortedBy { it.label.lowercase() }
@@ -400,15 +398,6 @@ private fun TightenRulesDialog(activity: MainActivity, state: FocusSnapshot, clo
             }
         }
     }
-}
-
-@Composable
-private fun pickerApps(activity: MainActivity, allowlist: Boolean): List<AppCatalog.Entry>? {
-    val apps by produceState<List<AppCatalog.Entry>?>(null, activity, allowlist) {
-        value = withContext(Dispatchers.IO) { AppCatalog.selectable(activity, allowlist) }
-    }
-    if (apps == null) FocusDialog("Loading apps", { activity.sheet = null }) { LinearProgressIndicator() }
-    return apps
 }
 
 @Composable
@@ -438,7 +427,6 @@ private fun AppPickerDialog(
         // Keep older selections visible even if an app has been removed.
         applications + (initialSelection - ids).sorted().map { AppCatalog.Entry(it, it) }
     }
-    val duplicateLabels = remember(allEntries) { allEntries.groupingBy { it.label }.eachCount().filterValues { it > 1 }.keys }
     val entries = if (selectedOnly) allEntries else applications
     val filtered = remember(entries, query, if (selectedOnly) selection else null) {
         entries.filter { entry ->
@@ -499,10 +487,7 @@ private fun AppPickerDialog(
                         verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(11.dp)) {
                         if (icon != null) Image(icon, contentDescription = null, modifier = Modifier.size(30.dp))
                         else Spacer(Modifier.size(30.dp))
-                        Column(Modifier.weight(1f)) {
-                            Text(entry.label, style = MaterialTheme.typography.bodyLarge)
-                            if (entry.label in duplicateLabels) Caption(entry.id)
-                        }
+                        Text(entry.label, Modifier.weight(1f), style = MaterialTheme.typography.bodyLarge)
                         Checkbox(checked, onCheckedChange = null)
                     }
                 }

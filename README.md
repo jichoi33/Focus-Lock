@@ -59,7 +59,7 @@ Emergency breaks let you pause Soft Lock temporarily while its countdown continu
 
 ### Soft Lock rules
 
-Allowed apps includes enabled packages in the current Android profile, including widget apps without a launcher icon. Search by app name or package name before starting a session. Focus Lock reads the installed app list locally for this picker.
+Allowed apps lists apps with launcher icons. Soft Lock automatically allows essential system functions, including recognized system Settings search and suggestion providers in Allowlist mode.
 
 You can tighten rules or add time mid-session. Website rules include subdomains and depend on the address bar being readable in a supported browser. If the accessibility service disconnects, the app shows **Blocking paused** while the countdown continues.
 

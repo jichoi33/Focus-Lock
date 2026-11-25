@@ -65,18 +65,15 @@ final class AppCatalog {
     static Set<String> settingsApps(PackageManager pm) {
         Set<String> packages = new HashSet<>();
         packages.add("com.android.settings");
-        for (ResolveInfo settings : pm.queryIntentActivities(new Intent(Settings.ACTION_SETTINGS),
-                PackageManager.MATCH_DEFAULT_ONLY | PackageManager.MATCH_SYSTEM_ONLY)) {
-            packages.add(settings.activityInfo.packageName);
+        for (String action : Arrays.asList(Settings.ACTION_SETTINGS, "com.android.settings.action.SETTINGS_SEARCH",
+                "android.settings.APP_SEARCH_SETTINGS")) {
+            for (ResolveInfo settings : pm.queryIntentActivities(new Intent(action),
+                    PackageManager.MATCH_DEFAULT_ONLY | PackageManager.MATCH_SYSTEM_ONLY)) {
+                packages.add(settings.activityInfo.packageName);
+            }
         }
         // AOSP Settings binds its suggestions service by component, without an intent filter.
-        String intelligence = "com.android.settings.intelligence";
-        try {
-            ApplicationInfo app = pm.getApplicationInfo(intelligence, 0);
-            if ((app.flags & ApplicationInfo.FLAG_SYSTEM) != 0) packages.add(intelligence);
-        } catch (PackageManager.NameNotFoundException ignored) {
-            // Manufacturers may supply their own provider.
-        }
+        addSystemApp(pm, packages, "com.android.settings.intelligence");
         Intent suggestions = new Intent("android.service.settings.suggestions.SuggestionService");
         for (ResolveInfo service : pm.queryIntentServices(suggestions, PackageManager.MATCH_SYSTEM_ONLY)) {
             packages.add(service.serviceInfo.packageName);
@@ -84,7 +81,18 @@ final class AppCatalog {
         return packages;
     }
 
-    static List<Entry> selectable(Context context, boolean includeNonLauncher) {
+    private static void addSystemApp(PackageManager pm, Set<String> packages, String id) {
+        try {
+            ApplicationInfo app = pm.getApplicationInfo(id, 0);
+            if ((app.flags & (ApplicationInfo.FLAG_SYSTEM | ApplicationInfo.FLAG_UPDATED_SYSTEM_APP)) != 0) {
+                packages.add(id);
+            }
+        } catch (PackageManager.NameNotFoundException ignored) {
+            // This system component is optional.
+        }
+    }
+
+    static List<Entry> launchable(Context context) {
         PackageManager pm = context.getPackageManager();
         Set<String> excluded = essentials(context);
         Map<String, Entry> entries = new LinkedHashMap<>();
@@ -93,23 +101,9 @@ final class AppCatalog {
             String id = result.activityInfo.packageName;
             if (!excluded.contains(id)) entries.putIfAbsent(id, new Entry(id, result.loadLabel(pm).toString()));
         }
-        Set<String> launcherIds = new HashSet<>(entries.keySet());
-        if (includeNonLauncher) {
-            for (ApplicationInfo app : pm.getInstalledApplications(0)) {
-                String id = app.packageName;
-                if (app.enabled && !excluded.contains(id) && !entries.containsKey(id)) {
-                    entries.put(id, new Entry(id, app.loadLabel(pm).toString()));
-                }
-            }
-        }
         List<Entry> list = new ArrayList<>(entries.values());
         Collator order = Collator.getInstance();
-        list.sort((left, right) -> {
-            int group = Boolean.compare(launcherIds.contains(right.id), launcherIds.contains(left.id));
-            if (group != 0) return group;
-            int label = order.compare(left.label, right.label);
-            return label != 0 ? label : left.id.compareTo(right.id);
-        });
+        list.sort((left, right) -> order.compare(left.label, right.label));
         return list;
     }
 
