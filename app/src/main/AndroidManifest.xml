@@ -7,6 +7,24 @@
     <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" />
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
     <queries>
+        <package android:name="com.samsung.android.app.smartcapture" />
+        <package android:name="com.samsung.android.clipboarduiservice" />
+        <package android:name="com.samsung.android.app.clipboardedge" />
+        <package android:name="com.samsung.android.biometrics.app.setting" />
+        <package android:name="com.android.intentresolver" />
+        <package android:name="com.google.android.intentresolver" />
+        <intent>
+            <action android:name="android.intent.action.CHOOSER" />
+        </intent>
+        <intent>
+            <action android:name="android.intent.action.OPEN_DOCUMENT" />
+            <category android:name="android.intent.category.OPENABLE" />
+            <data android:mimeType="*/*" />
+        </intent>
+        <intent>
+            <action android:name="android.provider.action.PICK_IMAGES" />
+            <data android:mimeType="image/*" />
+        </intent>
         <intent>
             <action android:name="com.android.settings.action.SETTINGS_SEARCH" />
         </intent>

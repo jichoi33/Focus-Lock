@@ -52,6 +52,26 @@ final class AppCatalog {
         return excluded;
     }
 
+    static void addAllowlistTools(Context context, Set<String> packages) {
+        PackageManager pm = context.getPackageManager();
+        for (String id : Arrays.asList(
+                "com.samsung.android.app.smartcapture", "com.samsung.android.clipboarduiservice",
+                "com.samsung.android.app.clipboardedge", "com.samsung.android.biometrics.app.setting",
+                "com.android.intentresolver", "com.google.android.intentresolver")) {
+            addSystemApp(pm, packages, id);
+        }
+        // A picker can also be a full gallery or file manager. Launcher apps remain user choices.
+        for (Intent intent : Arrays.asList(new Intent(Intent.ACTION_CHOOSER),
+                new Intent(Intent.ACTION_OPEN_DOCUMENT).addCategory(Intent.CATEGORY_OPENABLE).setType("*/*"),
+                new Intent("android.provider.action.PICK_IMAGES").setType("image/*"))) {
+            for (ResolveInfo handler : pm.queryIntentActivities(intent,
+                    PackageManager.MATCH_DEFAULT_ONLY | PackageManager.MATCH_SYSTEM_ONLY)) {
+                String id = handler.activityInfo.packageName;
+                if (pm.getLaunchIntentForPackage(id) == null) packages.add(id);
+            }
+        }
+    }
+
     static Set<String> homeApps(PackageManager pm) {
         Set<String> packages = new HashSet<>();
         for (ResolveInfo home : pm.queryIntentActivities(

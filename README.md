@@ -59,7 +59,7 @@ Emergency breaks let you pause Soft Lock temporarily while its countdown continu
 
 ### Soft Lock rules
 
-Allowed apps lists apps with launcher icons. Soft Lock automatically allows essential system functions, including recognized system Settings search and suggestion providers in Allowlist mode.
+Allowed apps lists apps with launcher icons. Soft Lock automatically allows essential system functions, including recognized system Settings search and suggestion providers in Allowlist mode. Allowlist also recognizes Samsung Capture, clipboard and biometric system tools, and dedicated Android sharing and picker components. Apps opened from these tools follow the normal app rules.
 
 You can tighten rules or add time mid-session. Website rules include subdomains and depend on the address bar being readable in a supported browser. If the accessibility service disconnects, the app shows **Blocking paused** while the countdown continues.
 

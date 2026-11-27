@@ -174,6 +174,7 @@ public final class SoftBlocker extends AccessibilityService {
         awaitingSoftExpiry = !session.test && session.active(SystemClock.elapsedRealtime());
         sessionKey = store.sessionId();
         essentials = AppCatalog.essentials(this);
+        if (session.allowlist) AppCatalog.addAllowlistTools(this, essentials);
         boolean inspectBrowsers = session.allowlist ? session.allowBrowserTabs : !session.sites.isEmpty();
         detectedBrowsers = inspectBrowsers ? AppCatalog.browsers(this, session.allowlist) : java.util.Collections.emptySet();
         customTabWindow = -1;
